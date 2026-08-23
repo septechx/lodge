@@ -1,0 +1,87 @@
+#pragma once
+
+#include <array>
+#include <cmath>
+
+#include "Vec3.hpp"
+
+// Helpful matrix diagram:
+// 0  1  2  3
+// 4  5  6  7
+// 8  9  10 11
+// 12 13 14 15
+
+struct Mat4 {
+public:
+  static const Mat4 IDENTITY;
+
+  constexpr Mat4() = default;
+  constexpr Mat4(std::array<float, 4> col0, std::array<float, 4> col1,
+                 std::array<float, 4> col2, std::array<float, 4> col3)
+      : m_data{
+            col0[0], col0[1], col0[2], col0[3], col1[0], col1[1],
+            col1[2], col1[3], col2[0], col2[1], col2[2], col2[3],
+            col3[0], col3[1], col3[2], col3[3],
+        } {}
+
+  constexpr Mat4 perspective(float fovYDeg, float aspect, float nearZ,
+                             float farZ) const {
+    const float fovYRad = fovYDeg * M_PI / 180.0f;
+    const float tanHalfFov = std::tan(fovYRad / 2.0f);
+    Mat4 r;
+    r(0, 0) = 1.0f / (aspect * tanHalfFov);
+    r(1, 1) = -1.0f / tanHalfFov;
+    r(2, 2) = farZ / (nearZ - farZ);
+    r(2, 3) = -1.0f;
+    r(3, 2) = farZ * nearZ / (nearZ - farZ);
+    return r;
+  }
+
+  constexpr Mat4 lookAt(Vec3 eye, Vec3 center, Vec3 up) const {
+    Vec3 back = (eye - center).normalize();
+    Vec3 right = up.cross(back).normalize();
+    Vec3 camUp = back.cross(right);
+    return {
+        {right.x, right.y, right.z, -right.dot(eye)},
+        {camUp.x, camUp.y, camUp.z, -camUp.dot(eye)},
+        {back.x, back.y, back.z, -back.dot(eye)},
+        {0, 0, 0, 1},
+    };
+  }
+
+  constexpr float &operator()(std::size_t row, std::size_t col) {
+    return m_data[col * 4 + row];
+  }
+
+  constexpr const float &operator()(std::size_t row, std::size_t col) const {
+    return m_data[col * 4 + row];
+  }
+
+private:
+  float m_data[16]{};
+};
+
+inline constexpr Mat4 Mat4::IDENTITY{
+    {1, 0, 0, 0},
+    {0, 1, 0, 0},
+    {0, 0, 1, 0},
+    {0, 0, 0, 1},
+};
+
+constexpr Mat4 operator*(const Mat4 &a, const Mat4 &b) {
+  Mat4 result;
+
+  for (std::size_t row = 0; row < 4; ++row) {
+    for (std::size_t col = 0; col < 4; ++col) {
+      float value = 0.0f;
+
+      for (std::size_t k = 0; k < 4; ++k) {
+        value += a(row, k) * b(k, col);
+      }
+
+      result(row, col) = value;
+    }
+  }
+
+  return result;
+}
