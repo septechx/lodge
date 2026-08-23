@@ -10,6 +10,6 @@ struct CmdBundle {
 CmdBundle createCmd(VkDevice device, uint32_t queueFamily);
 
 void recordFrame(VkCommandBuffer cmd, VkPipeline pipeline,
-                 VkPipelineLayout layout, float time, VkBuffer vertexBuffer,
+                 VkPipelineLayout layout, VkBuffer vertexBuffer,
                  VkDescriptorSet texSet, VkImage image, VkImageView view,
                  const VkExtent2D &extent, uint32_t vertexCount);

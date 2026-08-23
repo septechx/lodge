@@ -24,7 +24,7 @@ CmdBundle createCmd(VkDevice device, uint32_t queueFamily) {
 }
 
 void recordFrame(VkCommandBuffer cmd, VkPipeline pipeline,
-                 VkPipelineLayout layout, float time, VkBuffer vertexBuffer,
+                 VkPipelineLayout layout, VkBuffer vertexBuffer,
                  VkDescriptorSet texSet, VkImage image, VkImageView view,
                  const VkExtent2D &extent, uint32_t vertexCount) {
 
@@ -92,9 +92,6 @@ void recordFrame(VkCommandBuffer cmd, VkPipeline pipeline,
 
   VkDeviceSize offset = 0;
   vkCmdBindVertexBuffers(cmd, 0, 1, &vertexBuffer, &offset);
-
-  vkCmdPushConstants(cmd, layout, VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(float),
-                     &time);
 
   vkCmdDraw(cmd, vertexCount, 1, 0, 0);
 

@@ -113,8 +113,7 @@ int main() {
     }
     CHECK_VK(res, "acquire image");
 
-    recordFrame(cmd[frame].cmd, gp.pipeline, gp.layout,
-                static_cast<float>(glfwGetTime()), vb.buffer, desc.set,
+    recordFrame(cmd[frame].cmd, gp.pipeline, gp.layout, vb.buffer, desc.set,
                 sc.images[imageIndex], sc.views[imageIndex], sc.extent,
                 std::ranges::size(VERTICES));
 

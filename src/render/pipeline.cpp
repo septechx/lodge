@@ -139,18 +139,10 @@ GraphicsPipeline createPipeline(VkDevice device, VkFormat format,
       .pDynamicStates = dyn,
   };
 
-  VkPushConstantRange pushRange = {
-      .stageFlags = VK_SHADER_STAGE_VERTEX_BIT,
-      .offset = 0,
-      .size = sizeof(float),
-  };
-
   VkPipelineLayoutCreateInfo layoutInfo = {
       .sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO,
       .setLayoutCount = 1,
       .pSetLayouts = &setLayout,
-      .pushConstantRangeCount = 1,
-      .pPushConstantRanges = &pushRange,
   };
   VkPipelineLayout layout;
   CHECK_VK(vkCreatePipelineLayout(device, &layoutInfo, nullptr, &layout),
