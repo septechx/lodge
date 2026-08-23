@@ -1,8 +1,12 @@
 #pragma once
 
-#include <cstring>
 #include <vulkan/vulkan.h>
 
+#include <cstring>
+
+#include "../math/Mat4.hpp"
+#include "src/consts.hpp"
+#include "texture.hpp"
 #include "utils.hpp"
 
 struct VertexBuffer {
@@ -47,6 +51,27 @@ VertexBuffer createVertexBuffer(VkDevice device, VkPhysicalDevice physical,
 
   return VertexBuffer{buffer, memory};
 }
+
+struct UBO {
+  Mat4 viewproj;
+};
+
+struct UniformBuffer {
+  VkBuffer buffer;
+  VkDeviceMemory memory;
+  UBO *mapped;
+};
+
+UniformBuffer createUniformBuffer(VkDevice device, VkPhysicalDevice physical);
+
+struct SceneDescriptors {
+  VkDescriptorSetLayout layout;
+  VkDescriptorPool pool;
+  VkDescriptorSet sets[MAX_FRAMES_IN_FLIGHT];
+};
+
+SceneDescriptors createSceneDescriptors(VkDevice device, Texture tex,
+                                        UniformBuffer *ubos);
 
 struct GraphicsPipeline {
   VkPipeline pipeline;

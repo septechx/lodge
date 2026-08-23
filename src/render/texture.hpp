@@ -33,11 +33,3 @@ Texture createTexture(VkDevice device, VkPhysicalDevice physical, int width,
 
 void uploadPixels(VkDevice device, VkQueue queue, uint32_t queueFamily,
                   Texture tex, VkBuffer staging);
-
-struct TextureDescriptor {
-  VkDescriptorSetLayout layout;
-  VkDescriptorPool pool;
-  VkDescriptorSet set;
-};
-
-TextureDescriptor createTextureDescriptor(VkDevice device, Texture tex);

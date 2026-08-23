@@ -15,12 +15,17 @@
 
 #define VERTEX_COUNT 6
 const Vertex VERTICES[VERTEX_COUNT] = {
-    {-0.5f, -0.5f, 0.0f, 0.0f}, {0.5f, -0.5f, 1.0f, 0.0f},
-    {-0.5f, 0.5f, 0.0f, 1.0f},  {-0.5f, 0.5f, 0.0f, 1.0f},
-    {0.5f, -0.5f, 1.0f, 0.0f},  {0.5f, 0.5f, 1.0f, 1.0f},
+    {-1.0f, 0.0f, -1.0f, 0.0f, 0.0f}, {1.0f, 0.0f, -1.0f, 1.0f, 0.0f},
+    {-1.0f, 0.0f, 1.0f, 0.0f, 1.0f},  {-1.0f, 0.0f, 1.0f, 0.0f, 1.0f},
+    {1.0f, 0.0f, -1.0f, 1.0f, 0.0f},  {1.0f, 0.0f, 1.0f, 1.0f, 1.0f},
 };
 
-#define MAX_FRAMES_IN_FLIGHT 2
+static Mat4 computeViewProj(float aspect) {
+  Vec3 eye = {2, 1, 0};
+  Mat4 view = Mat4::lookAt(eye, Vec3{0, 0, 0}, Vec3::UP);
+  Mat4 proj = Mat4::perspective(FOV_Y_DEGREES, aspect, 0.1f, 20.0f);
+  return proj * view;
+}
 
 int main() {
   int init_result = glfwInit();
@@ -62,7 +67,11 @@ int main() {
   vkFreeMemory(dev.device, staging.memory, nullptr);
   stbi_image_free(img.pixels);
 
-  TextureDescriptor desc = createTextureDescriptor(dev.device, tex);
+  UniformBuffer ubos[MAX_FRAMES_IN_FLIGHT];
+  for (int i = 0; i < MAX_FRAMES_IN_FLIGHT; ++i)
+    ubos[i] = createUniformBuffer(dev.device, dev.physical);
+
+  SceneDescriptors desc = createSceneDescriptors(dev.device, tex, ubos);
 
   VertexBuffer vb = createVertexBuffer(dev.device, dev.physical, VERTICES);
 
@@ -70,7 +79,7 @@ int main() {
       createPipeline(dev.device, sc.format, sc.extent, desc.layout);
 
   CmdBundle cmd[MAX_FRAMES_IN_FLIGHT];
-  for (int i = 0; i < MAX_FRAMES_IN_FLIGHT; i++)
+  for (int i = 0; i < MAX_FRAMES_IN_FLIGHT; ++i)
     cmd[i] = createCmd(dev.device, dev.queueFamily);
 
   VkSemaphoreCreateInfo sci = {
@@ -78,13 +87,13 @@ int main() {
   };
 
   std::vector<VkSemaphore> submitSem(sc.imageCount);
-  for (uint32_t i = 0; i < sc.imageCount; i++)
+  for (uint32_t i = 0; i < sc.imageCount; ++i)
     CHECK_VK(vkCreateSemaphore(dev.device, &sci, nullptr, &submitSem[i]),
              "create submit sem");
 
   VkSemaphore acquireSem[MAX_FRAMES_IN_FLIGHT];
   VkFence frameFence[MAX_FRAMES_IN_FLIGHT];
-  for (int i = 0; i < MAX_FRAMES_IN_FLIGHT; i++) {
+  for (int i = 0; i < MAX_FRAMES_IN_FLIGHT; ++i) {
     CHECK_VK(vkCreateSemaphore(dev.device, &sci, nullptr, &acquireSem[i]),
              "create acquire sem");
     VkFenceCreateInfo fci = {
@@ -113,9 +122,13 @@ int main() {
     }
     CHECK_VK(res, "acquire image");
 
-    recordFrame(cmd[frame].cmd, gp.pipeline, gp.layout, vb.buffer, desc.set,
-                sc.images[imageIndex], sc.views[imageIndex], sc.extent,
-                std::ranges::size(VERTICES));
+    float aspect = (float)sc.extent.width / (float)sc.extent.height;
+    UBO uboData = {computeViewProj(aspect)};
+    memcpy(ubos[frame].mapped, &uboData, sizeof(UBO));
+
+    recordFrame(cmd[frame].cmd, gp.pipeline, gp.layout, vb.buffer,
+                desc.sets[frame], sc.images[imageIndex], sc.views[imageIndex],
+                sc.extent, std::ranges::size(VERTICES));
 
     VkPipelineStageFlags waitStage =
         VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;

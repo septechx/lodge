@@ -126,7 +126,7 @@ Device createDevice(VkInstance instance, VkSurfaceKHR surface) {
     std::vector<VkQueueFamilyProperties> fams(famCount);
     vkGetPhysicalDeviceQueueFamilyProperties(phys[i], &famCount, fams.data());
 
-    for (uint32_t j = 0; j < famCount; j++) {
+    for (uint32_t j = 0; j < famCount; ++j) {
       VkBool32 present = VK_FALSE;
       vkGetPhysicalDeviceSurfaceSupportKHR(phys[j], j, surface, &present);
       if ((fams[j].queueFlags & VK_QUEUE_GRAPHICS_BIT) && present) {

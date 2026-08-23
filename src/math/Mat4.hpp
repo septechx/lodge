@@ -24,28 +24,28 @@ public:
             col3[0], col3[1], col3[2], col3[3],
         } {}
 
-  constexpr Mat4 perspective(float fovYDeg, float aspect, float nearZ,
-                             float farZ) const {
+  static constexpr Mat4 perspective(float fovYDeg, float aspect, float nearZ,
+                                    float farZ) {
     const float fovYRad = fovYDeg * M_PI / 180.0f;
-    const float tanHalfFov = std::tan(fovYRad / 2.0f);
+    const float f = 1.0f / std::tan(fovYRad / 2.0f);
     Mat4 r;
-    r(0, 0) = 1.0f / (aspect * tanHalfFov);
-    r(1, 1) = -1.0f / tanHalfFov;
+    r(0, 0) = f / aspect;
+    r(1, 1) = -f;
     r(2, 2) = farZ / (nearZ - farZ);
-    r(2, 3) = -1.0f;
-    r(3, 2) = farZ * nearZ / (nearZ - farZ);
+    r(2, 3) = farZ * nearZ / (nearZ - farZ);
+    r(3, 2) = -1.0f;
     return r;
   }
 
-  constexpr Mat4 lookAt(Vec3 eye, Vec3 center, Vec3 up) const {
+  static constexpr Mat4 lookAt(Vec3 eye, Vec3 center, Vec3 up) {
     Vec3 back = (eye - center).normalize();
     Vec3 right = up.cross(back).normalize();
     Vec3 camUp = back.cross(right);
     return {
-        {right.x, right.y, right.z, -right.dot(eye)},
-        {camUp.x, camUp.y, camUp.z, -camUp.dot(eye)},
-        {back.x, back.y, back.z, -back.dot(eye)},
-        {0, 0, 0, 1},
+        {right.x, camUp.x, back.x, 0},
+        {right.y, camUp.y, back.y, 0},
+        {right.z, camUp.z, back.z, 0},
+        {-right.dot(eye), -camUp.dot(eye), -back.dot(eye), 1},
     };
   }
 

@@ -1,9 +1,8 @@
-#include <cstddef>
 #include <print>
-#include <vulkan/vulkan_core.h>
 
 #include "../utils.hpp"
 #include "pipeline.hpp"
+#include "src/consts.hpp"
 #include "utils.hpp"
 #include "vertex.hpp"
 
@@ -43,6 +42,116 @@ static ShaderModules loadShaders(VkDevice device) {
   return modules;
 }
 
+UniformBuffer createUniformBuffer(VkDevice device, VkPhysicalDevice physical) {
+  VkBufferCreateInfo bci = {
+      .sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO,
+      .size = sizeof(UBO),
+      .usage = VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT,
+      .sharingMode = VK_SHARING_MODE_EXCLUSIVE,
+  };
+  VkBuffer buffer;
+  CHECK_VK(vkCreateBuffer(device, &bci, nullptr, &buffer), "create ubo");
+
+  VkMemoryRequirements req;
+  vkGetBufferMemoryRequirements(device, buffer, &req);
+  uint32_t type = findMemoryType(physical, req.memoryTypeBits,
+                                 VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT |
+                                     VK_MEMORY_PROPERTY_HOST_COHERENT_BIT);
+  VkMemoryAllocateInfo ai = {
+      .sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO,
+      .allocationSize = req.size,
+      .memoryTypeIndex = type,
+  };
+  VkDeviceMemory memory;
+  CHECK_VK(vkAllocateMemory(device, &ai, nullptr, &memory), "alloc ubo");
+  CHECK_VK(vkBindBufferMemory(device, buffer, memory, 0), "bind ubo");
+
+  void *mapped = nullptr;
+  CHECK_VK(vkMapMemory(device, memory, 0, sizeof(UBO), 0, &mapped), "map ubo");
+  return UniformBuffer{buffer, memory, static_cast<UBO *>(mapped)};
+}
+
+SceneDescriptors createSceneDescriptors(VkDevice device, Texture tex,
+                                        UniformBuffer *ubos) {
+
+  VkDescriptorSetLayoutBinding bindings[2] = {
+      {.binding = 0,
+       .descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
+       .descriptorCount = 1,
+       .stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT},
+      {.binding = 1,
+       .descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,
+       .descriptorCount = 1,
+       .stageFlags = VK_SHADER_STAGE_VERTEX_BIT},
+  };
+  VkDescriptorSetLayoutCreateInfo lci = {
+      .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO,
+      .bindingCount = 2,
+      .pBindings = bindings,
+  };
+  VkDescriptorSetLayout setLayout;
+  CHECK_VK(vkCreateDescriptorSetLayout(device, &lci, nullptr, &setLayout),
+           "create set layout");
+
+  VkDescriptorPoolSize poolSizes[2] = {
+      {.type = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
+       .descriptorCount = MAX_FRAMES_IN_FLIGHT},
+      {.type = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,
+       .descriptorCount = MAX_FRAMES_IN_FLIGHT},
+  };
+  VkDescriptorPoolCreateInfo pci = {
+      .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO,
+      .maxSets = MAX_FRAMES_IN_FLIGHT,
+      .poolSizeCount = 2,
+      .pPoolSizes = poolSizes,
+  };
+  VkDescriptorPool pool;
+  CHECK_VK(vkCreateDescriptorPool(device, &pci, nullptr, &pool),
+           "create descriptor pool");
+
+  VkDescriptorSetLayout layouts[MAX_FRAMES_IN_FLIGHT] = {setLayout, setLayout};
+  VkDescriptorSetAllocateInfo ai = {
+      .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO,
+      .descriptorPool = pool,
+      .descriptorSetCount = MAX_FRAMES_IN_FLIGHT,
+      .pSetLayouts = layouts,
+  };
+  VkDescriptorSet sets[MAX_FRAMES_IN_FLIGHT];
+  CHECK_VK(vkAllocateDescriptorSets(device, &ai, sets), "alloc sets");
+
+  for (int i = 0; i < MAX_FRAMES_IN_FLIGHT; ++i) {
+    VkDescriptorImageInfo imageInfo = {
+        .sampler = tex.sampler,
+        .imageView = tex.view,
+        .imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
+    };
+    VkDescriptorBufferInfo bufferInfo = {
+        .buffer = ubos[i].buffer,
+        .offset = 0,
+        .range = sizeof(UBO),
+    };
+    VkWriteDescriptorSet writes[2] = {
+        {.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
+         .dstSet = sets[i],
+         .dstBinding = 0,
+         .dstArrayElement = 0,
+         .descriptorCount = 1,
+         .descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
+         .pImageInfo = &imageInfo},
+        {.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
+         .dstSet = sets[i],
+         .dstBinding = 1,
+         .dstArrayElement = 0,
+         .descriptorCount = 1,
+         .descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,
+         .pBufferInfo = &bufferInfo},
+    };
+    vkUpdateDescriptorSets(device, 2, writes, 0, nullptr);
+  }
+
+  return SceneDescriptors{setLayout, pool, {sets[0], sets[1]}};
+}
+
 GraphicsPipeline createPipeline(VkDevice device, VkFormat format,
                                 const VkExtent2D &extent,
                                 VkDescriptorSetLayout setLayout) {
@@ -67,7 +176,7 @@ GraphicsPipeline createPipeline(VkDevice device, VkFormat format,
   VkVertexInputAttributeDescription attrs[2] = {
       {.location = 0,
        .binding = 0,
-       .format = VK_FORMAT_R32G32_SFLOAT,
+       .format = VK_FORMAT_R32G32B32_SFLOAT,
        .offset = offsetof(Vertex, x)},
       {.location = 1,
        .binding = 0,

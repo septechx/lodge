@@ -1,6 +1,6 @@
 #pragma once
 
 struct Vertex {
-  float x, y; /* position */
-  float u, v; /* texture */
+  float x, y, z; /* position */
+  float u, v;    /* texture */
 };
