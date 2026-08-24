@@ -53,7 +53,7 @@ void recordFrame(VkCommandBuffer cmd, VkPipeline pipeline,
   };
   vkCmdPipelineBarrier2(cmd, &dep0);
 
-  const float clearColor[4] = {0.06f, 0.09f, 0.10f, 1.0f};
+  const float clearColor[4] = {0.00f, 0.00f, 0.00f, 1.0f};
   VkRenderingAttachmentInfo colorAttachment = {
       .sType = VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO,
       .imageView = view,
