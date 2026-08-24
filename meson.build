@@ -33,6 +33,8 @@ executable(
   'lodge',
   'src/main.cpp',
   'src/utils.cpp',
+  'src/core/event.cpp',
+  'src/core/layer_stack.cpp',
   'src/render/allocator.cpp',
   'src/render/init.cpp',
   'src/render/pipeline.cpp',
