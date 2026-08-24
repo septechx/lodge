@@ -109,6 +109,12 @@ VkInstance createInstance() {
   return instance;
 }
 
+void destroyInstance(VkInstance instance) {
+  if (pfnDestroyDebugMessenger && debugMessenger != VK_NULL_HANDLE)
+    pfnDestroyDebugMessenger(instance, debugMessenger, nullptr);
+  vkDestroyInstance(instance, nullptr);
+}
+
 Device createDevice(VkInstance instance, VkSurfaceKHR surface) {
   uint32_t count = 0;
   CHECK_VK(vkEnumeratePhysicalDevices(instance, &count, nullptr), "count GPUs");
@@ -128,7 +134,7 @@ Device createDevice(VkInstance instance, VkSurfaceKHR surface) {
 
     for (uint32_t j = 0; j < famCount; ++j) {
       VkBool32 present = VK_FALSE;
-      vkGetPhysicalDeviceSurfaceSupportKHR(phys[j], j, surface, &present);
+      vkGetPhysicalDeviceSurfaceSupportKHR(phys[i], j, surface, &present);
       if ((fams[j].queueFlags & VK_QUEUE_GRAPHICS_BIT) && present) {
         chosen = phys[j];
         chosenFamily = j;

@@ -2,55 +2,17 @@
 
 #include <vulkan/vulkan.h>
 
-#include <cstring>
-
 #include "../math/Mat4.hpp"
 #include "src/consts.hpp"
 #include "texture.hpp"
-#include "utils.hpp"
 
 struct VertexBuffer {
   VkBuffer buffer;
   VkDeviceMemory memory;
 };
 
-template <typename T>
 VertexBuffer createVertexBuffer(VkDevice device, VkPhysicalDevice physical,
-                                const T &data) {
-  VkBufferCreateInfo bci = {
-      .sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO,
-      .size = sizeof(T),
-      .usage = VK_BUFFER_USAGE_VERTEX_BUFFER_BIT,
-      .sharingMode = VK_SHARING_MODE_EXCLUSIVE,
-  };
-  VkBuffer buffer;
-  CHECK_VK(vkCreateBuffer(device, &bci, nullptr, &buffer),
-           "create vertex buffer");
-
-  VkMemoryRequirements req;
-  vkGetBufferMemoryRequirements(device, buffer, &req);
-  uint32_t type = findMemoryType(physical, req.memoryTypeBits,
-                                 VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT |
-                                     VK_MEMORY_PROPERTY_HOST_COHERENT_BIT);
-  VkMemoryAllocateInfo ai = {
-      .sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO,
-      .allocationSize = req.size,
-      .memoryTypeIndex = type,
-  };
-  VkDeviceMemory memory;
-  CHECK_VK(vkAllocateMemory(device, &ai, nullptr, &memory),
-           "alloc vertex memory");
-  CHECK_VK(vkBindBufferMemory(device, buffer, memory, 0),
-           "bind vertex buffer memory");
-
-  void *dst = nullptr;
-  CHECK_VK(vkMapMemory(device, memory, 0, sizeof(T), 0, &dst),
-           "map vertex memory");
-  memcpy(dst, data, sizeof(T));
-  vkUnmapMemory(device, memory);
-
-  return VertexBuffer{buffer, memory};
-}
+                                const void *data, VkDeviceSize size);
 
 struct UBO {
   Mat4 viewproj;

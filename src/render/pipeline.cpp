@@ -1,6 +1,8 @@
+#include <cstring>
 #include <print>
 
 #include "../utils.hpp"
+#include "allocator.hpp"
 #include "pipeline.hpp"
 #include "src/consts.hpp"
 #include "utils.hpp"
@@ -43,32 +45,29 @@ static ShaderModules loadShaders(VkDevice device) {
 }
 
 UniformBuffer createUniformBuffer(VkDevice device, VkPhysicalDevice physical) {
-  VkBufferCreateInfo bci = {
-      .sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO,
-      .size = sizeof(UBO),
-      .usage = VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT,
-      .sharingMode = VK_SHARING_MODE_EXCLUSIVE,
-  };
-  VkBuffer buffer;
-  CHECK_VK(vkCreateBuffer(device, &bci, nullptr, &buffer), "create ubo");
-
-  VkMemoryRequirements req;
-  vkGetBufferMemoryRequirements(device, buffer, &req);
-  uint32_t type = findMemoryType(physical, req.memoryTypeBits,
-                                 VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT |
-                                     VK_MEMORY_PROPERTY_HOST_COHERENT_BIT);
-  VkMemoryAllocateInfo ai = {
-      .sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO,
-      .allocationSize = req.size,
-      .memoryTypeIndex = type,
-  };
-  VkDeviceMemory memory;
-  CHECK_VK(vkAllocateMemory(device, &ai, nullptr, &memory), "alloc ubo");
-  CHECK_VK(vkBindBufferMemory(device, buffer, memory, 0), "bind ubo");
-
+  AllocatedBuffer buf = createBuffer(device, physical, sizeof(UBO),
+                                     VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT,
+                                     VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT |
+                                         VK_MEMORY_PROPERTY_HOST_COHERENT_BIT);
   void *mapped = nullptr;
-  CHECK_VK(vkMapMemory(device, memory, 0, sizeof(UBO), 0, &mapped), "map ubo");
-  return UniformBuffer{buffer, memory, static_cast<UBO *>(mapped)};
+  CHECK_VK(vkMapMemory(device, buf.memory, 0, sizeof(UBO), 0, &mapped),
+           "map ubo");
+  return UniformBuffer{buf.buffer, buf.memory, static_cast<UBO *>(mapped)};
+}
+
+VertexBuffer createVertexBuffer(VkDevice device, VkPhysicalDevice physical,
+                                const void *data, VkDeviceSize size) {
+  AllocatedBuffer buf =
+      createBuffer(device, physical, size, VK_BUFFER_USAGE_VERTEX_BUFFER_BIT,
+                   VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT |
+                       VK_MEMORY_PROPERTY_HOST_COHERENT_BIT);
+  void *dst = nullptr;
+  CHECK_VK(vkMapMemory(device, buf.memory, 0, size, 0, &dst),
+           "map vertex memory");
+  memcpy(dst, data, static_cast<size_t>(size));
+  vkUnmapMemory(device, buf.memory);
+
+  return VertexBuffer{buf.buffer, buf.memory};
 }
 
 SceneDescriptors createSceneDescriptors(VkDevice device, Texture tex,
@@ -275,6 +274,9 @@ GraphicsPipeline createPipeline(VkDevice device, VkFormat format,
   CHECK_VK(vkCreateGraphicsPipelines(device, VK_NULL_HANDLE, 1, &info, nullptr,
                                      &pipeline),
            "create graphics pipeline");
+
+  vkDestroyShaderModule(device, modules.frag, nullptr);
+  vkDestroyShaderModule(device, modules.vert, nullptr);
 
   return GraphicsPipeline{pipeline, layout};
 }

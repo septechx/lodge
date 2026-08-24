@@ -13,6 +13,3 @@
       exit(1);                                                                 \
     }                                                                          \
   } while (0)
-
-uint32_t findMemoryType(VkPhysicalDevice physical, uint32_t typeBits,
-                        VkMemoryPropertyFlags props);

@@ -1,93 +1,24 @@
+#define STB_IMAGE_IMPLEMENTATION
 #include "../../thirdparty/stb_image.h"
-#include <vulkan/vulkan_core.h>
 
+#include <cstring>
 #include <print>
 
+#include "allocator.hpp"
+#include "init.hpp"
 #include "texture.hpp"
 #include "utils.hpp"
 
-DecodedImage decodePNG(std::filesystem::path path) {
-  DecodedImage img = {0};
-
-  img.pixels = stbi_load(path.c_str(), &img.w, &img.h, nullptr, 4);
-  if (!img.pixels) {
-    std::println(stderr, "stb_image failed to load {}: {}", path.string(),
-                 stbi_failure_reason());
-    exit(1);
-  }
-
-  std::println(stderr, "texture: {} ({}x{} RGBA)", path.string(), img.w, img.h);
-
-  img.texSize = static_cast<VkDeviceSize>(img.w * img.h * 4);
-
-  return img;
-}
-
-StagingBuffer createStaging(VkDevice device, VkPhysicalDevice physical,
-                            VkDeviceSize size) {
-  VkBufferCreateInfo bci = {
-      .sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO,
-      .size = size,
-      .usage = VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
-      .sharingMode = VK_SHARING_MODE_EXCLUSIVE,
-  };
-  VkBuffer buffer;
-  CHECK_VK(vkCreateBuffer(device, &bci, nullptr, &buffer), "create staging");
-
-  VkMemoryRequirements req;
-  vkGetBufferMemoryRequirements(device, buffer, &req);
-  uint32_t type = findMemoryType(physical, req.memoryTypeBits,
-                                 VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT |
-                                     VK_MEMORY_PROPERTY_HOST_COHERENT_BIT);
-  VkMemoryAllocateInfo ai = {
-      .sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO,
-      .allocationSize = req.size,
-      .memoryTypeIndex = type,
-  };
-  VkDeviceMemory memory;
-  CHECK_VK(vkAllocateMemory(device, &ai, nullptr, &memory), "alloc staging");
-
-  CHECK_VK(vkBindBufferMemory(device, buffer, memory, 0), "bind staging");
-
-  return StagingBuffer{buffer, memory};
-}
-
-Texture createTexture(VkDevice device, VkPhysicalDevice physical, int width,
-                      int height) {
-  VkImageCreateInfo ici = {
-      .sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO,
-      .imageType = VK_IMAGE_TYPE_2D,
-      .format = VK_FORMAT_R8G8B8A8_SRGB,
-      .extent = {(uint32_t)width, (uint32_t)height, 1},
-      .mipLevels = 1,
-      .arrayLayers = 1,
-      .samples = VK_SAMPLE_COUNT_1_BIT,
-      .tiling = VK_IMAGE_TILING_OPTIMAL,
-      .usage = VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_SAMPLED_BIT,
-      .sharingMode = VK_SHARING_MODE_EXCLUSIVE,
-      .initialLayout = VK_IMAGE_LAYOUT_UNDEFINED,
-  };
-  VkImage image;
-  CHECK_VK(vkCreateImage(device, &ici, nullptr, &image),
-           "create texture image");
-
-  VkMemoryRequirements req;
-  vkGetImageMemoryRequirements(device, image, &req);
-  uint32_t type = findMemoryType(physical, req.memoryTypeBits,
-                                 VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
-  VkMemoryAllocateInfo ai = {
-      .sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO,
-      .allocationSize = req.size,
-      .memoryTypeIndex = type,
-  };
-  VkDeviceMemory memory;
-  CHECK_VK(vkAllocateMemory(device, &ai, nullptr, &memory),
-           "alloc texture mem");
-  CHECK_VK(vkBindImageMemory(device, image, memory, 0), "bind texture mem");
+static Texture createTexture(VkDevice device, VkPhysicalDevice physical,
+                             int width, int height) {
+  AllocatedImage img =
+      createImage(device, physical, static_cast<uint32_t>(width),
+                  static_cast<uint32_t>(height), VK_FORMAT_R8G8B8A8_SRGB,
+                  VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_SAMPLED_BIT);
 
   VkImageViewCreateInfo vi = {
       .sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO,
-      .image = image,
+      .image = img.image,
       .viewType = VK_IMAGE_VIEW_TYPE_2D,
       .format = VK_FORMAT_R8G8B8A8_SRGB,
       .subresourceRange = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1},
@@ -113,8 +44,8 @@ Texture createTexture(VkDevice device, VkPhysicalDevice physical, int width,
   CHECK_VK(vkCreateSampler(device, &sci, nullptr, &sampler), "create sampler");
 
   return Texture{
-      image,
-      memory,
+      img.image,
+      img.memory,
       view,
       sampler,
       static_cast<uint32_t>(width),
@@ -122,8 +53,8 @@ Texture createTexture(VkDevice device, VkPhysicalDevice physical, int width,
   };
 }
 
-void uploadPixels(VkDevice device, VkQueue queue, uint32_t queueFamily,
-                  Texture tex, VkBuffer staging) {
+static void uploadPixels(VkDevice device, VkQueue queue, uint32_t queueFamily,
+                         Texture tex, VkBuffer staging) {
   VkCommandPoolCreateInfo pci = {
       .sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO,
       .flags = VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT,
@@ -208,4 +139,36 @@ void uploadPixels(VkDevice device, VkQueue queue, uint32_t queueFamily,
 
   vkFreeCommandBuffers(device, pool, 1, &cmd);
   vkDestroyCommandPool(device, pool, nullptr);
+}
+
+Texture loadTexture(const Device &dev, const char *path) {
+  int w, h;
+  unsigned char *pixels =
+      stbi_load(path, &w, &h, nullptr, 4);
+  if (!pixels) {
+    std::println(stderr, "stb_image failed to load {}: {}", path,
+                 stbi_failure_reason());
+    exit(1);
+  }
+  std::println(stderr, "texture: {} ({}x{} RGBA)", path, w, h);
+  VkDeviceSize texSize = static_cast<VkDeviceSize>(w * h * 4);
+
+  AllocatedBuffer staging =
+      createBuffer(dev.device, dev.physical, texSize,
+                   VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
+                   VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT |
+                       VK_MEMORY_PROPERTY_HOST_COHERENT_BIT);
+  void *dst = nullptr;
+  CHECK_VK(vkMapMemory(dev.device, staging.memory, 0, texSize, 0, &dst),
+           "map staging");
+  memcpy(dst, pixels, static_cast<size_t>(texSize));
+  vkUnmapMemory(dev.device, staging.memory);
+
+  Texture tex = createTexture(dev.device, dev.physical, w, h);
+  uploadPixels(dev.device, dev.queue, dev.queueFamily, tex, staging.buffer);
+
+  vkDestroyBuffer(dev.device, staging.buffer, nullptr);
+  vkFreeMemory(dev.device, staging.memory, nullptr);
+  stbi_image_free(pixels);
+  return tex;
 }

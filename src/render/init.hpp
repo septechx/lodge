@@ -7,6 +7,8 @@
 
 VkInstance createInstance();
 
+void destroyInstance(VkInstance instance);
+
 struct Device {
   VkPhysicalDevice physical;
   VkDevice device;
