@@ -10,9 +10,6 @@ std::expected<std::string, ReadFileError>
 readFileToString(const std::filesystem::path &path);
 
 template <typename T, typename Deleter> class Scoped {
-  T value;
-  Deleter deleter;
-
 public:
   constexpr Scoped(T value, Deleter deleter = {})
       : value(value), deleter(deleter) {}
@@ -23,4 +20,8 @@ public:
   ~Scoped() { deleter(value); }
 
   constexpr T get() const { return value; }
+
+private:
+  T value;
+  Deleter deleter;
 };
