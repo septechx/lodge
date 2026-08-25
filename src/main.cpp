@@ -56,7 +56,7 @@ int main() {
 
   glfwWindowHint(GLFW_CLIENT_API, GLFW_NO_API);
   auto window =
-      Scoped(glfwCreateWindow(WIDTH, HEIGHT, "Hello world", nullptr, nullptr),
+      Scoped(glfwCreateWindow(WIDTH, HEIGHT, "Lodge", nullptr, nullptr),
              [](GLFWwindow *window) {
                glfwDestroyWindow(window);
                glfwTerminate();
