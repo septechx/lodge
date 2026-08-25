@@ -1,7 +1,9 @@
 #include "render.hpp"
 
+#include "../math/Mat4.hpp"
 #include "imgui_impl_vulkan.h"
 #include "utils.hpp"
+#include <vulkan/vulkan_core.h>
 
 CmdBundle createCmd(VkDevice device, uint32_t queueFamily) {
   VkCommandPoolCreateInfo cpi = {
@@ -25,11 +27,16 @@ CmdBundle createCmd(VkDevice device, uint32_t queueFamily) {
   return CmdBundle{pool, cmd};
 }
 
+static constexpr Mat4 objectModelMatrix(RenderObject object) {
+  return Mat4::translate(object.pos) * Mat4::rotEuler(object.euler) *
+         Mat4::scale({object.scale, object.scale, object.scale});
+}
+
 void recordFrame(VkCommandBuffer cmd, VkPipeline pipeline,
-                 VkPipelineLayout layout, VkBuffer vertexBuffer,
-                 VkBuffer indexBuffer, uint32_t indexCount,
-                 VkDescriptorSet texSet, VkImage image, VkImageView view,
-                 VkImage depthImage, VkImageView depthView,
+                 VkPipelineLayout layout, std::vector<RenderObject> objects,
+                 VkBuffer vertexBuffer, VkBuffer indexBuffer,
+                 uint32_t indexCount, VkDescriptorSet texSet, VkImage image,
+                 VkImageView view, VkImage depthImage, VkImageView depthView,
                  const VkExtent2D &extent, ImDrawData *drawData) {
 
   VkCommandBufferBeginInfo begin = {
@@ -118,7 +125,12 @@ void recordFrame(VkCommandBuffer cmd, VkPipeline pipeline,
   vkCmdBindVertexBuffers(cmd, 0, 1, &vertexBuffer, &offset);
   vkCmdBindIndexBuffer(cmd, indexBuffer, 0, VK_INDEX_TYPE_UINT16);
 
-  vkCmdDrawIndexed(cmd, indexCount, 1, 0, 0, 0);
+  for (RenderObject object : objects) {
+    Mat4 modelMatrix = objectModelMatrix(object);
+    vkCmdPushConstants(cmd, layout, VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(Mat4),
+                       &modelMatrix);
+    vkCmdDrawIndexed(cmd, indexCount, 1, 0, 0, 0);
+  }
 
   vkCmdEndRendering(cmd);
 

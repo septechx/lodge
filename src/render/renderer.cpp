@@ -4,14 +4,15 @@
 #include "imgui.h"
 #include "imgui_impl_vulkan.h"
 #include "render.hpp"
+#include "render_object.hpp"
 #include "utils.hpp"
 #include "vertex.hpp"
 
 #include <cstring>
 #include <ranges>
+#include <vector>
 
-#define VERTEX_COUNT 24
-static const Vertex VERTICES[VERTEX_COUNT] = {
+static const Vertex VERTICES[24] = {
     {-0.75f, -0.75f, +0.75f, 0.0f, 1.0f}, {+0.75f, -0.75f, +0.75f, 1.0f, 1.0f},
     {-0.75f, +0.75f, +0.75f, 0.0f, 0.0f}, {+0.75f, +0.75f, +0.75f, 1.0f, 0.0f},
 
@@ -31,10 +32,15 @@ static const Vertex VERTICES[VERTEX_COUNT] = {
     {-0.75f, -0.75f, +0.75f, 0.0f, 0.0f}, {+0.75f, -0.75f, +0.75f, 1.0f, 0.0f},
 };
 
-#define INDEX_COUNT 36
-static const uint16_t INDICES[INDEX_COUNT] = {
+static const uint16_t INDICES[36] = {
     0,  1,  2,  2,  1,  3,  4,  5,  6,  6,  5,  7,  8,  9,  10, 10, 9,  11,
     12, 13, 14, 14, 13, 15, 16, 17, 18, 18, 17, 19, 20, 21, 22, 22, 21, 23,
+};
+
+static const RenderObject OBJECTS[3] = {
+    {{0.0f, 0.0f, 0.0f}, {0.00f, 0.00f, 0.00f}, 1.00f},
+    {{0.0f, 0.0f, 3.0f}, {0.26f, 0.61f, 0.00f}, 0.65f},
+    {{0.0f, 0.0f, -3.0f}, {0.00f, -0.35f, 0.44f}, 0.85f},
 };
 
 static VkFormat findDepthFormat(VkPhysicalDevice physical) {
@@ -193,11 +199,12 @@ void Renderer::drawFrame() {
     }
   }
 
-  recordFrame(m_cmd[m_frame].cmd, m_gp.pipeline, m_gp.layout, m_vb.buffer,
-              m_ib.buffer, std::ranges::size(INDICES), m_desc.sets[m_frame],
-              m_sc.images[imageIndex], m_sc.views[imageIndex],
-              m_depths[imageIndex].image, m_depths[imageIndex].view,
-              m_sc.extent, drawData);
+  std::vector<RenderObject> objects(std::begin(OBJECTS), std::end(OBJECTS));
+  recordFrame(m_cmd[m_frame].cmd, m_gp.pipeline, m_gp.layout, objects,
+              m_vb.buffer, m_ib.buffer, std::ranges::size(INDICES),
+              m_desc.sets[m_frame], m_sc.images[imageIndex],
+              m_sc.views[imageIndex], m_depths[imageIndex].image,
+              m_depths[imageIndex].view, m_sc.extent, drawData);
 
   VkPipelineStageFlags waitStage =
       VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;

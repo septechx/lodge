@@ -50,6 +50,62 @@ public:
     };
   }
 
+  static constexpr Mat4 translate(Vec3 pos) {
+    Mat4 r = IDENTITY;
+    r(0, 3) = pos.x;
+    r(1, 3) = pos.y;
+    r(2, 3) = pos.z;
+    return r;
+  }
+
+  static constexpr Mat4 scale(Vec3 scale) {
+    Mat4 r;
+    r(0, 0) = scale.x;
+    r(1, 1) = scale.y;
+    r(2, 2) = scale.z;
+    r(3, 3) = 1.0f;
+    return r;
+  }
+
+  static constexpr Mat4 rotX(float rad) {
+    float c = std::cos(rad);
+    float s = std::sin(rad);
+    Mat4 r = IDENTITY;
+    r(1, 1) = c;
+    r(1, 2) = s;
+    r(2, 1) = -s;
+    r(3, 3) = c;
+    return r;
+  }
+
+  static constexpr Mat4 rotY(float rad) {
+    float c = std::cos(rad);
+    float s = std::sin(rad);
+    Mat4 r = IDENTITY;
+    r(0, 0) = c;
+    r(0, 2) = s;
+    r(2, 0) = -s;
+    r(2, 2) = c;
+    return r;
+  }
+
+  static constexpr Mat4 rotZ(float rad) {
+    float c = std::cos(rad);
+    float s = std::sin(rad);
+    Mat4 r = IDENTITY;
+    // 0  1  2  3
+    // 4  5  6  7
+    // 8  9  10 11
+    // 12 13 14 15
+    r(0, 0) = c;
+    r(0, 1) = s;
+    r(1, 0) = -s;
+    r(1, 1) = c;
+    return r;
+  }
+
+  static constexpr Mat4 rotEuler(Vec3 euler);
+
   constexpr float &operator()(std::size_t row, std::size_t col) {
     return m_data[col * 4 + row];
   }
@@ -85,4 +141,8 @@ constexpr Mat4 operator*(const Mat4 &a, const Mat4 &b) {
   }
 
   return result;
+}
+
+constexpr Mat4 Mat4::rotEuler(Vec3 euler) {
+  return Mat4::rotX(euler.x) * Mat4::rotY(euler.y) * Mat4::rotZ(euler.z);
 }

@@ -1,5 +1,9 @@
 #version 450
 
+layout(push_constant) uniform ModelMatrix {
+    mat4 model;
+} model;
+
 layout(binding = 1) uniform CameraData {
     mat4 viewproj;
 } camera;
@@ -11,5 +15,5 @@ layout(location = 0) out vec2 fragUV;
 
 void main() {
     fragUV = uv;
-    gl_Position = camera.viewproj * vec4(pos, 1.0);
+    gl_Position = camera.viewproj * model.model * vec4(pos, 1.0);
 }
