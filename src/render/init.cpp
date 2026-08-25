@@ -1,3 +1,7 @@
+#include "init.hpp"
+
+#include "../consts.hpp"
+#include "utils.hpp"
 #include <GLFW/glfw3.h>
 
 #include <algorithm>
@@ -5,10 +9,6 @@
 #include <cstring>
 #include <print>
 #include <ranges>
-
-#include "../consts.hpp"
-#include "init.hpp"
-#include "utils.hpp"
 
 const char *VK_VALIDATION_LAYER = "VK_LAYER_KHRONOS_validation";
 PFN_vkCreateDebugUtilsMessengerEXT pfnCreateDebugMessenger;

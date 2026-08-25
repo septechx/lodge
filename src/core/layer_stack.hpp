@@ -1,8 +1,8 @@
 #pragma once
 
-#include <vector>
-
 #include "layer.hpp"
+
+#include <vector>
 
 class LayerStack {
 public:

@@ -1,3 +1,6 @@
+#include "debug_layer.hpp"
+
+#include "../render/camera.hpp"
 #include "imgui.h"
 #include "imgui_impl_glfw.h"
 #include "imgui_impl_vulkan.h"
@@ -5,9 +8,6 @@
 #include <algorithm>
 #include <cmath>
 #include <print>
-
-#include "../render/camera.hpp"
-#include "debug_layer.hpp"
 
 static float radians(float deg) { return deg * (LDG_PI / 180.0f); }
 static float degrees(float rad) { return rad * (180.0f / LDG_PI); }

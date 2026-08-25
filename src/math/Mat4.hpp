@@ -1,10 +1,10 @@
 #pragma once
 
-#include <array>
-#include <cmath>
-
 #include "Vec3.hpp"
 #include "math.h"
+
+#include <array>
+#include <cmath>
 
 // Helpful matrix diagram:
 // 0  1  2  3

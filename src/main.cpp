@@ -1,11 +1,3 @@
-#define GLFW_INCLUDE_VULKAN
-#include <GLFW/glfw3.h>
-
-#include <chrono>
-#include <cstring>
-#include <print>
-#include <variant>
-
 #include "consts.hpp"
 #include "core/debug_layer.hpp"
 #include "core/event.hpp"
@@ -13,6 +5,12 @@
 #include "core/layer_stack.hpp"
 #include "render/renderer.hpp"
 #include "utils.hpp"
+#include <GLFW/glfw3.h>
+
+#include <chrono>
+#include <cstring>
+#include <print>
+#include <variant>
 
 class ControlLayer final : public Layer {
 public:

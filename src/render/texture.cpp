@@ -1,13 +1,14 @@
+#include "texture.hpp"
+
 #define STB_IMAGE_IMPLEMENTATION
 #include "../../thirdparty/stb_image.h"
 
-#include <cstring>
-#include <print>
-
 #include "allocator.hpp"
 #include "init.hpp"
-#include "texture.hpp"
 #include "utils.hpp"
+
+#include <cstring>
+#include <print>
 
 static Texture createTexture(VkDevice device, VkPhysicalDevice physical,
                              int width, int height) {
@@ -143,8 +144,7 @@ static void uploadPixels(VkDevice device, VkQueue queue, uint32_t queueFamily,
 
 Texture loadTexture(const Device &dev, const char *path) {
   int w, h;
-  unsigned char *pixels =
-      stbi_load(path, &w, &h, nullptr, 4);
+  unsigned char *pixels = stbi_load(path, &w, &h, nullptr, 4);
   if (!pixels) {
     std::println(stderr, "stb_image failed to load {}: {}", path,
                  stbi_failure_reason());
@@ -153,11 +153,10 @@ Texture loadTexture(const Device &dev, const char *path) {
   std::println(stderr, "texture: {} ({}x{} RGBA)", path, w, h);
   VkDeviceSize texSize = static_cast<VkDeviceSize>(w * h * 4);
 
-  AllocatedBuffer staging =
-      createBuffer(dev.device, dev.physical, texSize,
-                   VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
-                   VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT |
-                       VK_MEMORY_PROPERTY_HOST_COHERENT_BIT);
+  AllocatedBuffer staging = createBuffer(
+      dev.device, dev.physical, texSize, VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
+      VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT |
+          VK_MEMORY_PROPERTY_HOST_COHERENT_BIT);
   void *dst = nullptr;
   CHECK_VK(vkMapMemory(dev.device, staging.memory, 0, texSize, 0, &dst),
            "map staging");

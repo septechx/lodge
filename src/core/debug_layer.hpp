@@ -1,10 +1,8 @@
 #pragma once
 
-#define GLFW_INCLUDE_VULKAN
-#include <GLFW/glfw3.h>
-
 #include "../render/renderer.hpp"
 #include "layer.hpp"
+#include <GLFW/glfw3.h>
 
 class DebugLayer final : public Layer {
 public:

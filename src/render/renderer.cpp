@@ -1,16 +1,14 @@
-#define GLFW_INCLUDE_VULKAN
+#include "renderer.hpp"
+
+#include "../consts.hpp"
 #include "imgui.h"
 #include "imgui_impl_vulkan.h"
-#include <GLFW/glfw3.h>
+#include "render.hpp"
+#include "utils.hpp"
+#include "vertex.hpp"
 
 #include <cstring>
 #include <ranges>
-
-#include "../consts.hpp"
-#include "render.hpp"
-#include "renderer.hpp"
-#include "utils.hpp"
-#include "vertex.hpp"
 
 #define VERTEX_COUNT 24
 static const Vertex VERTICES[VERTEX_COUNT] = {

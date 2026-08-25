@@ -1,15 +1,15 @@
 #pragma once
 
+#define GLFW_INCLUDE_VULKAN
 #include <GLFW/glfw3.h>
-#include <vulkan/vulkan.h>
-
-#include <vector>
 
 #include "camera.hpp"
 #include "init.hpp"
 #include "pipeline.hpp"
 #include "render.hpp"
 #include "texture.hpp"
+
+#include <vector>
 
 class Renderer {
 public:

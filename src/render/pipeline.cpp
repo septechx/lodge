@@ -1,12 +1,13 @@
-#include <cstring>
-#include <print>
+#include "pipeline.hpp"
 
 #include "../consts.hpp"
 #include "../utils.hpp"
 #include "allocator.hpp"
-#include "pipeline.hpp"
 #include "utils.hpp"
 #include "vertex.hpp"
+
+#include <cstring>
+#include <print>
 
 struct ShaderModules {
   VkShaderModule vert, frag;

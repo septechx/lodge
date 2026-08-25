@@ -1,8 +1,7 @@
 #pragma once
 
+#include "imgui.h"
 #include <vulkan/vulkan.h>
-
-struct ImDrawData;
 
 struct CmdBundle {
   VkCommandPool pool;

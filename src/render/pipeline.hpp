@@ -1,11 +1,10 @@
 #pragma once
 
-#include <vulkan/vulkan.h>
-
 #include "../consts.hpp"
 #include "../math/Mat4.hpp"
 #include "allocator.hpp"
 #include "texture.hpp"
+#include <vulkan/vulkan.h>
 
 AllocatedBuffer createVertexBuffer(VkDevice device, VkPhysicalDevice physical,
                                    const void *data, VkDeviceSize size);

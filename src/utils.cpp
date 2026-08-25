@@ -1,6 +1,6 @@
-#include <fstream>
-
 #include "utils.hpp"
+
+#include <fstream>
 
 std::expected<std::string, ReadFileError>
 readFileToString(const std::filesystem::path &path) {

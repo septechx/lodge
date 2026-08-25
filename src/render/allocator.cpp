@@ -1,4 +1,5 @@
 #include "allocator.hpp"
+
 #include "utils.hpp"
 
 static uint32_t findMemoryType(VkPhysicalDevice physical, uint32_t typeBits,
