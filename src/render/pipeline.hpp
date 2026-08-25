@@ -13,17 +13,18 @@ AllocatedBuffer createVertexBuffer(VkDevice device, VkPhysicalDevice physical,
 AllocatedBuffer createIndexBuffer(VkDevice device, VkPhysicalDevice physical,
                                   const void *data, VkDeviceSize size);
 
-struct UBO {
+struct CameraData {
   Mat4 viewproj;
 };
 
-struct UniformBuffer {
+struct CameraUniformBuffer {
   VkBuffer buffer;
   VkDeviceMemory memory;
-  UBO *mapped;
+  CameraData *mapped;
 };
 
-UniformBuffer createUniformBuffer(VkDevice device, VkPhysicalDevice physical);
+CameraUniformBuffer createCameraUniformBuffer(VkDevice device,
+                                              VkPhysicalDevice physical);
 
 struct DepthBuffer {
   VkImage image;
@@ -42,7 +43,7 @@ struct SceneDescriptors {
 };
 
 SceneDescriptors createSceneDescriptors(VkDevice device, Texture tex,
-                                        UniformBuffer *ubos);
+                                        CameraUniformBuffer *cameras);
 
 struct GraphicsPipeline {
   VkPipeline pipeline;

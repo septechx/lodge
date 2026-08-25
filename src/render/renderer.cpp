@@ -78,16 +78,16 @@ Renderer::Renderer(GLFWwindow &window) : m_window(window) {
   m_depthFormat = findDepthFormat(m_dev.physical);
   m_depths.resize(m_sc.imageCount);
   for (uint32_t i = 0; i < m_sc.imageCount; ++i)
-    m_depths[i] = createDepthBuffer(m_dev.device, m_dev.physical,
-                                    m_depthFormat, m_sc.extent.width,
-                                    m_sc.extent.height);
+    m_depths[i] = createDepthBuffer(m_dev.device, m_dev.physical, m_depthFormat,
+                                    m_sc.extent.width, m_sc.extent.height);
 
   m_tex = loadTexture(m_dev, "textures/red_brick_diff_1k.png");
 
   for (int i = 0; i < MAX_FRAMES_IN_FLIGHT; ++i)
-    m_ubos[i] = createUniformBuffer(m_dev.device, m_dev.physical);
+    m_cameraUniforms[i] =
+        createCameraUniformBuffer(m_dev.device, m_dev.physical);
 
-  m_desc = createSceneDescriptors(m_dev.device, m_tex, m_ubos);
+  m_desc = createSceneDescriptors(m_dev.device, m_tex, m_cameraUniforms);
 
   m_vb = createVertexBuffer(m_dev.device, m_dev.physical, VERTICES,
                             sizeof(VERTICES));
@@ -153,9 +153,8 @@ void Renderer::recreateSwapchain() {
 
   m_depths.resize(m_sc.imageCount);
   for (uint32_t i = 0; i < m_sc.imageCount; ++i)
-    m_depths[i] = createDepthBuffer(m_dev.device, m_dev.physical,
-                                    m_depthFormat, m_sc.extent.width,
-                                    m_sc.extent.height);
+    m_depths[i] = createDepthBuffer(m_dev.device, m_dev.physical, m_depthFormat,
+                                    m_sc.extent.width, m_sc.extent.height);
 }
 
 void Renderer::drawFrame() {
@@ -187,8 +186,8 @@ void Renderer::drawFrame() {
 
   float aspect = static_cast<float>(m_sc.extent.width) /
                  static_cast<float>(m_sc.extent.height);
-  UBO uboData = {computeViewProj(aspect)};
-  memcpy(m_ubos[m_frame].mapped, &uboData, sizeof(UBO));
+  CameraData cameraData = {computeViewProj(aspect)};
+  memcpy(m_cameraUniforms[m_frame].mapped, &cameraData, sizeof(CameraData));
 
   recordFrame(m_cmd[m_frame].cmd, m_gp.pipeline, m_gp.layout, m_vb.buffer,
               m_ib.buffer, std::ranges::size(INDICES), m_desc.sets[m_frame],
@@ -259,9 +258,9 @@ Renderer::~Renderer() {
   vkFreeMemory(device, m_tex.memory, nullptr);
 
   for (int i = 0; i < MAX_FRAMES_IN_FLIGHT; ++i) {
-    vkUnmapMemory(device, m_ubos[i].memory);
-    vkDestroyBuffer(device, m_ubos[i].buffer, nullptr);
-    vkFreeMemory(device, m_ubos[i].memory, nullptr);
+    vkUnmapMemory(device, m_cameraUniforms[i].memory);
+    vkDestroyBuffer(device, m_cameraUniforms[i].buffer, nullptr);
+    vkFreeMemory(device, m_cameraUniforms[i].memory, nullptr);
   }
 
   destroySwapchainResources();

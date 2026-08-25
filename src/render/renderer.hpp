@@ -30,7 +30,7 @@ private:
   std::vector<DepthBuffer> m_depths;
   bool m_swapchainDirty = false;
   Texture m_tex;
-  UniformBuffer m_ubos[MAX_FRAMES_IN_FLIGHT];
+  CameraUniformBuffer m_cameraUniforms[MAX_FRAMES_IN_FLIGHT];
   SceneDescriptors m_desc;
   AllocatedBuffer m_vb;
   AllocatedBuffer m_ib;

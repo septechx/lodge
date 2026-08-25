@@ -75,15 +75,17 @@ AllocatedBuffer createIndexBuffer(VkDevice device, VkPhysicalDevice physical,
   return buf;
 }
 
-UniformBuffer createUniformBuffer(VkDevice device, VkPhysicalDevice physical) {
-  AllocatedBuffer buf = createBuffer(device, physical, sizeof(UBO),
+CameraUniformBuffer createCameraUniformBuffer(VkDevice device,
+                                              VkPhysicalDevice physical) {
+  AllocatedBuffer buf = createBuffer(device, physical, sizeof(CameraData),
                                      VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT,
                                      VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT |
                                          VK_MEMORY_PROPERTY_HOST_COHERENT_BIT);
   void *mapped = nullptr;
-  CHECK_VK(vkMapMemory(device, buf.memory, 0, sizeof(UBO), 0, &mapped),
-           "map ubo");
-  return UniformBuffer{buf.buffer, buf.memory, static_cast<UBO *>(mapped)};
+  CHECK_VK(vkMapMemory(device, buf.memory, 0, sizeof(CameraData), 0, &mapped),
+           "map camera uniform");
+  return CameraUniformBuffer{buf.buffer, buf.memory,
+                             static_cast<CameraData *>(mapped)};
 }
 
 DepthBuffer createDepthBuffer(VkDevice device, VkPhysicalDevice physical,
@@ -106,7 +108,7 @@ DepthBuffer createDepthBuffer(VkDevice device, VkPhysicalDevice physical,
 }
 
 SceneDescriptors createSceneDescriptors(VkDevice device, Texture tex,
-                                        UniformBuffer *ubos) {
+                                        CameraUniformBuffer *cameras) {
 
   VkDescriptorSetLayoutBinding bindings[2] = {
       {.binding = 0,
@@ -160,9 +162,9 @@ SceneDescriptors createSceneDescriptors(VkDevice device, Texture tex,
         .imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
     };
     VkDescriptorBufferInfo bufferInfo = {
-        .buffer = ubos[i].buffer,
+        .buffer = cameras[i].buffer,
         .offset = 0,
-        .range = sizeof(UBO),
+        .range = sizeof(CameraData),
     };
     VkWriteDescriptorSet writes[2] = {
         {.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
