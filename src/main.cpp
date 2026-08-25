@@ -66,8 +66,13 @@ int main() {
     glfwPollEvents();
 
     Event event;
-    while (events.poll(event))
+    while (events.poll(event)) {
+      const auto *resize = std::get_if<events::WindowResized>(&event);
+      if (resize != nullptr) {
+        renderer.onResize(resize->width, resize->height);
+      }
       layers.onEvent(event);
+    }
 
     layers.onUpdate(dt);
     renderer.drawFrame();

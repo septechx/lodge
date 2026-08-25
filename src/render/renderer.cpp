@@ -66,7 +66,7 @@ static VkFormat findDepthFormat(VkPhysicalDevice physical) {
   return *it;
 }
 
-Renderer::Renderer(GLFWwindow &window) {
+Renderer::Renderer(GLFWwindow &window) : m_window(window) {
   m_instance = createInstance();
 
   CHECK_VK(glfwCreateWindowSurface(m_instance, &window, nullptr, &m_surface),
@@ -75,11 +75,12 @@ Renderer::Renderer(GLFWwindow &window) {
   m_dev = createDevice(m_instance, m_surface);
   m_sc = createSwapchain(m_dev.device, m_dev.physical, m_surface, window);
 
-  VkFormat depthFormat = findDepthFormat(m_dev.physical);
+  m_depthFormat = findDepthFormat(m_dev.physical);
   m_depths.resize(m_sc.imageCount);
   for (uint32_t i = 0; i < m_sc.imageCount; ++i)
-    m_depths[i] = createDepthBuffer(m_dev.device, m_dev.physical, depthFormat,
-                                    m_sc.extent.width, m_sc.extent.height);
+    m_depths[i] = createDepthBuffer(m_dev.device, m_dev.physical,
+                                    m_depthFormat, m_sc.extent.width,
+                                    m_sc.extent.height);
 
   m_tex = loadTexture(m_dev, "textures/red_brick_diff_1k.png");
 
@@ -93,7 +94,7 @@ Renderer::Renderer(GLFWwindow &window) {
   m_ib =
       createIndexBuffer(m_dev.device, m_dev.physical, INDICES, sizeof(INDICES));
 
-  m_gp = createPipeline(m_dev.device, m_sc.format, depthFormat, m_sc.extent,
+  m_gp = createPipeline(m_dev.device, m_sc.format, m_depthFormat, m_sc.extent,
                         m_desc.layout);
 
   for (int i = 0; i < MAX_FRAMES_IN_FLIGHT; ++i)
@@ -120,8 +121,54 @@ Renderer::Renderer(GLFWwindow &window) {
   }
 }
 
+void Renderer::onResize(uint32_t width, uint32_t height) {
+  if (width == 0 || height == 0)
+    return;
+  m_swapchainDirty = true;
+}
+
+void Renderer::destroySwapchainResources() {
+  const VkDevice device = m_dev.device;
+
+  for (DepthBuffer depth : m_depths) {
+    vkDestroyImageView(device, depth.view, nullptr);
+    vkDestroyImage(device, depth.image, nullptr);
+    vkFreeMemory(device, depth.memory, nullptr);
+  }
+  m_depths.clear();
+
+  for (VkImageView view : m_sc.views)
+    vkDestroyImageView(device, view, nullptr);
+  vkDestroySwapchainKHR(device, m_sc.swapchain, nullptr);
+}
+
+void Renderer::recreateSwapchain() {
+  const VkDevice device = m_dev.device;
+
+  vkDeviceWaitIdle(device);
+
+  destroySwapchainResources();
+
+  m_sc = createSwapchain(device, m_dev.physical, m_surface, m_window);
+
+  m_depths.resize(m_sc.imageCount);
+  for (uint32_t i = 0; i < m_sc.imageCount; ++i)
+    m_depths[i] = createDepthBuffer(m_dev.device, m_dev.physical,
+                                    m_depthFormat, m_sc.extent.width,
+                                    m_sc.extent.height);
+}
+
 void Renderer::drawFrame() {
   const VkDevice device = m_dev.device;
+
+  if (m_swapchainDirty) {
+    recreateSwapchain();
+    m_swapchainDirty = false;
+    return;
+  }
+
+  if (m_sc.extent.width == 0 || m_sc.extent.height == 0)
+    return; // minimized
 
   CHECK_VK(
       vkWaitForFences(device, 1, &m_frameFence[m_frame], VK_TRUE, UINT64_MAX),
@@ -133,6 +180,7 @@ void Renderer::drawFrame() {
       vkAcquireNextImageKHR(device, m_sc.swapchain, UINT64_MAX,
                             m_acquireSem[m_frame], VK_NULL_HANDLE, &imageIndex);
   if (res == VK_ERROR_OUT_OF_DATE_KHR) {
+    recreateSwapchain();
     return;
   }
   CHECK_VK(res, "acquire image");
@@ -172,7 +220,9 @@ void Renderer::drawFrame() {
       .pImageIndices = &imageIndex,
   };
   res = vkQueuePresentKHR(m_dev.queue, &present);
-  if (res != VK_ERROR_OUT_OF_DATE_KHR && res != VK_SUBOPTIMAL_KHR) {
+  if (res == VK_ERROR_OUT_OF_DATE_KHR || res == VK_SUBOPTIMAL_KHR) {
+    recreateSwapchain();
+  } else {
     CHECK_VK(res, "present");
   }
 
@@ -203,12 +253,6 @@ Renderer::~Renderer() {
   vkDestroyBuffer(device, m_ib.buffer, nullptr);
   vkFreeMemory(device, m_ib.memory, nullptr);
 
-  for (DepthBuffer depth : m_depths) {
-    vkDestroyImageView(device, depth.view, nullptr);
-    vkDestroyImage(device, depth.image, nullptr);
-    vkFreeMemory(device, depth.memory, nullptr);
-  }
-
   vkDestroySampler(device, m_tex.sampler, nullptr);
   vkDestroyImageView(device, m_tex.view, nullptr);
   vkDestroyImage(device, m_tex.image, nullptr);
@@ -220,9 +264,7 @@ Renderer::~Renderer() {
     vkFreeMemory(device, m_ubos[i].memory, nullptr);
   }
 
-  for (VkImageView view : m_sc.views)
-    vkDestroyImageView(device, view, nullptr);
-  vkDestroySwapchainKHR(device, m_sc.swapchain, nullptr);
+  destroySwapchainResources();
   vkDestroySurfaceKHR(m_instance, m_surface, nullptr);
 
   vkDestroyDevice(device, nullptr);

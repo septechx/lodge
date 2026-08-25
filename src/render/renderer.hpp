@@ -15,13 +15,20 @@ public:
   Renderer(GLFWwindow &window);
   ~Renderer();
   void drawFrame();
+  void onResize(uint32_t width, uint32_t height);
 
 private:
+  void recreateSwapchain();
+  void destroySwapchainResources();
+
+  GLFWwindow &m_window;
   VkInstance m_instance;
   VkSurfaceKHR m_surface;
   Device m_dev;
   Swapchain m_sc;
+  VkFormat m_depthFormat;
   std::vector<DepthBuffer> m_depths;
+  bool m_swapchainDirty = false;
   Texture m_tex;
   UniformBuffer m_ubos[MAX_FRAMES_IN_FLIGHT];
   SceneDescriptors m_desc;
