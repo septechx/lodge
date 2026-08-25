@@ -2,6 +2,8 @@
 
 #include <vulkan/vulkan.h>
 
+struct ImDrawData;
+
 struct CmdBundle {
   VkCommandPool pool;
   VkCommandBuffer cmd;
@@ -14,4 +16,4 @@ void recordFrame(VkCommandBuffer cmd, VkPipeline pipeline,
                  VkBuffer indexBuffer, uint32_t indexCount,
                  VkDescriptorSet texSet, VkImage image, VkImageView view,
                  VkImage depthImage, VkImageView depthView,
-                 const VkExtent2D &extent);
+                 const VkExtent2D &extent, ImDrawData *drawData = nullptr);

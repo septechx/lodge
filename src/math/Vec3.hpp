@@ -5,8 +5,6 @@
 struct Vec3 {
   float x, y, z;
 
-  static const Vec3 UP;
-
   constexpr Vec3() = default;
   constexpr Vec3(float x, float y, float z) : x(x), y(y), z(z) {}
 
@@ -57,7 +55,5 @@ struct Vec3 {
     };
   }
 };
-
-inline constexpr Vec3 Vec3::UP{0, 1, 0};
 
 constexpr Vec3 operator*(float scalar, const Vec3 &v) { return v * scalar; }

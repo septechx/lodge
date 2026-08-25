@@ -5,6 +5,7 @@
 
 #include <vector>
 
+#include "camera.hpp"
 #include "init.hpp"
 #include "pipeline.hpp"
 #include "render.hpp"
@@ -16,6 +17,17 @@ public:
   ~Renderer();
   void drawFrame();
   void onResize(uint32_t width, uint32_t height);
+
+  Camera &getCamera() { return m_camera; }
+  const Camera &getCamera() const { return m_camera; }
+  void setCamera(const Camera &cam) { m_camera = cam; }
+
+  VkInstance getInstance() const { return m_instance; }
+  Device &getDevice() { return m_dev; }
+  const Device &getDevice() const { return m_dev; }
+  Swapchain &getSwapchain() { return m_sc; }
+  VkFormat getSwapchainFormat() const { return m_sc.format; }
+  VkFormat getDepthFormat() const { return m_depthFormat; }
 
 private:
   void recreateSwapchain();
@@ -40,4 +52,5 @@ private:
   VkSemaphore m_acquireSem[MAX_FRAMES_IN_FLIGHT];
   VkFence m_frameFence[MAX_FRAMES_IN_FLIGHT];
   int m_frame = 0;
+  Camera m_camera;
 };

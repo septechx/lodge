@@ -1,12 +1,12 @@
-#include "src/render/pipeline.hpp"
 #define GLFW_INCLUDE_VULKAN
+#include "imgui.h"
+#include "imgui_impl_vulkan.h"
 #include <GLFW/glfw3.h>
 
 #include <cstring>
 #include <ranges>
 
 #include "../consts.hpp"
-#include "../math/Mat4.hpp"
 #include "render.hpp"
 #include "renderer.hpp"
 #include "utils.hpp"
@@ -38,13 +38,6 @@ static const uint16_t INDICES[INDEX_COUNT] = {
     0,  1,  2,  2,  1,  3,  4,  5,  6,  6,  5,  7,  8,  9,  10, 10, 9,  11,
     12, 13, 14, 14, 13, 15, 16, 17, 18, 18, 17, 19, 20, 21, 22, 22, 21, 23,
 };
-
-static Mat4 computeViewProj(float aspect) {
-  Vec3 eye = {2, 1.5, 1};
-  Mat4 view = Mat4::lookAt(eye, Vec3{0, 0, 0}, Vec3::UP);
-  Mat4 proj = Mat4::perspective(FOV_Y_DEGREES, aspect, 0.1f, 20.0f);
-  return proj * view;
-}
 
 static VkFormat findDepthFormat(VkPhysicalDevice physical) {
   static const VkFormat candidates[] = {
@@ -155,6 +148,10 @@ void Renderer::recreateSwapchain() {
   for (uint32_t i = 0; i < m_sc.imageCount; ++i)
     m_depths[i] = createDepthBuffer(m_dev.device, m_dev.physical, m_depthFormat,
                                     m_sc.extent.width, m_sc.extent.height);
+
+  if (ImGui::GetCurrentContext() != nullptr) {
+    ImGui_ImplVulkan_SetMinImageCount(m_sc.imageCount);
+  }
 }
 
 void Renderer::drawFrame() {
@@ -186,14 +183,23 @@ void Renderer::drawFrame() {
 
   float aspect = static_cast<float>(m_sc.extent.width) /
                  static_cast<float>(m_sc.extent.height);
-  CameraData cameraData = {computeViewProj(aspect)};
+  CameraData cameraData = {m_camera.getViewProj(aspect)};
   memcpy(m_cameraUniforms[m_frame].mapped, &cameraData, sizeof(CameraData));
+
+  ImDrawData *drawData = nullptr;
+  if (ImGui::GetCurrentContext() != nullptr) {
+    drawData = ImGui::GetDrawData();
+    if (drawData != nullptr &&
+        (drawData->DisplaySize.x <= 0.0f || drawData->DisplaySize.y <= 0.0f)) {
+      drawData = nullptr;
+    }
+  }
 
   recordFrame(m_cmd[m_frame].cmd, m_gp.pipeline, m_gp.layout, m_vb.buffer,
               m_ib.buffer, std::ranges::size(INDICES), m_desc.sets[m_frame],
               m_sc.images[imageIndex], m_sc.views[imageIndex],
               m_depths[imageIndex].image, m_depths[imageIndex].view,
-              m_sc.extent);
+              m_sc.extent, drawData);
 
   VkPipelineStageFlags waitStage =
       VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;

@@ -2,10 +2,12 @@
 #include <GLFW/glfw3.h>
 
 #include <chrono>
+#include <cstring>
 #include <print>
 #include <variant>
 
 #include "consts.hpp"
+#include "core/debug_layer.hpp"
 #include "core/event.hpp"
 #include "core/layer.hpp"
 #include "core/layer_stack.hpp"
@@ -47,7 +49,9 @@ private:
   GLFWwindow &m_window;
 };
 
-int main() {
+int main(int argc, char **argv) {
+  bool enableDebug = argc >= 2 && strcmp(argv[1], "--debug") == 0;
+
   int init_result = glfwInit();
   if (init_result == 0) {
     std::println(stderr, "glfw init failed");
@@ -73,7 +77,12 @@ int main() {
 
   LayerStack layers;
   ControlLayer controlLayer(*window.get());
-  layers.pushOverlay(controlLayer);
+  layers.pushLayer(controlLayer);
+
+  DebugLayer debugLayer(*window.get(), renderer);
+  if (enableDebug) {
+    layers.pushOverlay(debugLayer);
+  }
 
   auto last = std::chrono::steady_clock::now();
   while (!glfwWindowShouldClose(window.get()) && !controlLayer.shouldQuit()) {

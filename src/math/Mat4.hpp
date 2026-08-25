@@ -4,6 +4,7 @@
 #include <cmath>
 
 #include "Vec3.hpp"
+#include "math.h"
 
 // Helpful matrix diagram:
 // 0  1  2  3
@@ -26,7 +27,7 @@ public:
 
   static constexpr Mat4 perspective(float fovYDeg, float aspect, float nearZ,
                                     float farZ) {
-    const float fovYRad = fovYDeg * M_PI / 180.0f;
+    const float fovYRad = fovYDeg * LDG_PI / 180.0f;
     const float f = 1.0f / std::tan(fovYRad / 2.0f);
     Mat4 r;
     r(0, 0) = f / aspect;

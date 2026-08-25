@@ -1,6 +1,5 @@
 #include <cstring>
 #include <print>
-#include <vulkan/vulkan_core.h>
 
 #include "../consts.hpp"
 #include "../utils.hpp"

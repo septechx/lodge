@@ -13,6 +13,16 @@ deps = [
   dependency('glfw3'),
 ]
 
+imgui_include = include_directories('thirdparty/imgui', 'thirdparty/imgui/backends')
+imgui_sources = files(
+  'thirdparty/imgui/imgui.cpp',
+  'thirdparty/imgui/imgui_draw.cpp',
+  'thirdparty/imgui/imgui_tables.cpp',
+  'thirdparty/imgui/imgui_widgets.cpp',
+  'thirdparty/imgui/backends/imgui_impl_glfw.cpp',
+  'thirdparty/imgui/backends/imgui_impl_vulkan.cpp',
+)
+
 shaders = [
   ['shader.vert', 'vertex'],
   ['shader.frag', 'fragment'],
@@ -35,13 +45,16 @@ executable(
   'src/utils.cpp',
   'src/core/event.cpp',
   'src/core/layer_stack.cpp',
+  'src/core/debug_layer.cpp',
   'src/render/allocator.cpp',
   'src/render/init.cpp',
   'src/render/pipeline.cpp',
   'src/render/texture.cpp',
   'src/render/renderer.cpp',
   'src/render/render.cpp',
+  imgui_sources,
   sources: shader_deps,
   dependencies: deps,
+  include_directories: imgui_include,
   cpp_args: ['-Wno-missing-field-initializers'],
 )

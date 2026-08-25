@@ -1,5 +1,4 @@
 #include <GLFW/glfw3.h>
-#include <vulkan/vulkan_core.h>
 
 #include <algorithm>
 #include <cstdint>

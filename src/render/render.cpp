@@ -1,6 +1,7 @@
+#include "imgui_impl_vulkan.h"
+
 #include "render.hpp"
 #include "utils.hpp"
-#include <vulkan/vulkan_core.h>
 
 CmdBundle createCmd(VkDevice device, uint32_t queueFamily) {
   VkCommandPoolCreateInfo cpi = {
@@ -29,7 +30,7 @@ void recordFrame(VkCommandBuffer cmd, VkPipeline pipeline,
                  VkBuffer indexBuffer, uint32_t indexCount,
                  VkDescriptorSet texSet, VkImage image, VkImageView view,
                  VkImage depthImage, VkImageView depthView,
-                 const VkExtent2D &extent) {
+                 const VkExtent2D &extent, ImDrawData *drawData) {
 
   VkCommandBufferBeginInfo begin = {
       .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO,
@@ -120,6 +121,26 @@ void recordFrame(VkCommandBuffer cmd, VkPipeline pipeline,
   vkCmdDrawIndexed(cmd, indexCount, 1, 0, 0, 0);
 
   vkCmdEndRendering(cmd);
+
+  if (drawData != nullptr && drawData->TotalVtxCount > 0) {
+    VkRenderingAttachmentInfo colorAttachmentImGui = {
+        .sType = VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO,
+        .imageView = view,
+        .imageLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
+        .loadOp = VK_ATTACHMENT_LOAD_OP_LOAD,
+        .storeOp = VK_ATTACHMENT_STORE_OP_STORE,
+    };
+    VkRenderingInfo renderingImGui = {
+        .sType = VK_STRUCTURE_TYPE_RENDERING_INFO,
+        .renderArea = {{0, 0}, extent},
+        .layerCount = 1,
+        .colorAttachmentCount = 1,
+        .pColorAttachments = &colorAttachmentImGui,
+    };
+    vkCmdBeginRendering(cmd, &renderingImGui);
+    ImGui_ImplVulkan_RenderDrawData(drawData, cmd);
+    vkCmdEndRendering(cmd);
+  }
 
   VkImageMemoryBarrier2 toPresent = {
       .sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2,
