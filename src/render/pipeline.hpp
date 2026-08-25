@@ -2,17 +2,16 @@
 
 #include <vulkan/vulkan.h>
 
+#include "../consts.hpp"
 #include "../math/Mat4.hpp"
-#include "src/consts.hpp"
+#include "allocator.hpp"
 #include "texture.hpp"
 
-struct VertexBuffer {
-  VkBuffer buffer;
-  VkDeviceMemory memory;
-};
+AllocatedBuffer createVertexBuffer(VkDevice device, VkPhysicalDevice physical,
+                                   const void *data, VkDeviceSize size);
 
-VertexBuffer createVertexBuffer(VkDevice device, VkPhysicalDevice physical,
-                                const void *data, VkDeviceSize size);
+AllocatedBuffer createIndexBuffer(VkDevice device, VkPhysicalDevice physical,
+                                  const void *data, VkDeviceSize size);
 
 struct UBO {
   Mat4 viewproj;
@@ -25,6 +24,16 @@ struct UniformBuffer {
 };
 
 UniformBuffer createUniformBuffer(VkDevice device, VkPhysicalDevice physical);
+
+struct DepthBuffer {
+  VkImage image;
+  VkDeviceMemory memory;
+  VkImageView view;
+  VkFormat format;
+};
+
+DepthBuffer createDepthBuffer(VkDevice device, VkPhysicalDevice physical,
+                              VkFormat format, uint32_t width, uint32_t height);
 
 struct SceneDescriptors {
   VkDescriptorSetLayout layout;
@@ -40,6 +49,6 @@ struct GraphicsPipeline {
   VkPipelineLayout layout;
 };
 
-GraphicsPipeline createPipeline(VkDevice device, VkFormat format,
-                                const VkExtent2D &extent,
+GraphicsPipeline createPipeline(VkDevice device, VkFormat colorFormat,
+                                VkFormat depthFormat, const VkExtent2D &extent,
                                 VkDescriptorSetLayout setLayout);

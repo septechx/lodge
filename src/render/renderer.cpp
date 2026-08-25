@@ -1,3 +1,4 @@
+#include "src/render/pipeline.hpp"
 #define GLFW_INCLUDE_VULKAN
 #include <GLFW/glfw3.h>
 
@@ -11,18 +12,58 @@
 #include "utils.hpp"
 #include "vertex.hpp"
 
-#define VERTEX_COUNT 6
+#define VERTEX_COUNT 24
 static const Vertex VERTICES[VERTEX_COUNT] = {
-    {-1.0f, 0.0f, -1.0f, 0.0f, 0.0f}, {1.0f, 0.0f, -1.0f, 1.0f, 0.0f},
-    {-1.0f, 0.0f, 1.0f, 0.0f, 1.0f},  {-1.0f, 0.0f, 1.0f, 0.0f, 1.0f},
-    {1.0f, 0.0f, -1.0f, 1.0f, 0.0f},  {1.0f, 0.0f, 1.0f, 1.0f, 1.0f},
+    {-0.75f, -0.75f, +0.75f, 0.0f, 1.0f}, {+0.75f, -0.75f, +0.75f, 1.0f, 1.0f},
+    {-0.75f, +0.75f, +0.75f, 0.0f, 0.0f}, {+0.75f, +0.75f, +0.75f, 1.0f, 0.0f},
+
+    {+0.75f, -0.75f, -0.75f, 0.0f, 1.0f}, {-0.75f, -0.75f, -0.75f, 1.0f, 1.0f},
+    {+0.75f, +0.75f, -0.75f, 0.0f, 0.0f}, {-0.75f, +0.75f, -0.75f, 1.0f, 0.0f},
+
+    {+0.75f, -0.75f, +0.75f, 0.0f, 1.0f}, {+0.75f, -0.75f, -0.75f, 1.0f, 1.0f},
+    {+0.75f, +0.75f, +0.75f, 0.0f, 0.0f}, {+0.75f, +0.75f, -0.75f, 1.0f, 0.0f},
+
+    {-0.75f, -0.75f, -0.75f, 0.0f, 1.0f}, {-0.75f, -0.75f, +0.75f, 1.0f, 1.0f},
+    {-0.75f, +0.75f, -0.75f, 0.0f, 0.0f}, {-0.75f, +0.75f, +0.75f, 1.0f, 0.0f},
+
+    {-0.75f, +0.75f, +0.75f, 0.0f, 1.0f}, {+0.75f, +0.75f, +0.75f, 1.0f, 1.0f},
+    {-0.75f, +0.75f, -0.75f, 0.0f, 0.0f}, {+0.75f, +0.75f, -0.75f, 1.0f, 0.0f},
+
+    {-0.75f, -0.75f, -0.75f, 0.0f, 1.0f}, {+0.75f, -0.75f, -0.75f, 1.0f, 1.0f},
+    {-0.75f, -0.75f, +0.75f, 0.0f, 0.0f}, {+0.75f, -0.75f, +0.75f, 1.0f, 0.0f},
+};
+
+#define INDEX_COUNT 36
+static const uint16_t INDICES[INDEX_COUNT] = {
+    0,  1,  2,  2,  1,  3,  4,  5,  6,  6,  5,  7,  8,  9,  10, 10, 9,  11,
+    12, 13, 14, 14, 13, 15, 16, 17, 18, 18, 17, 19, 20, 21, 22, 22, 21, 23,
 };
 
 static Mat4 computeViewProj(float aspect) {
-  Vec3 eye = {2, 1, 0};
+  Vec3 eye = {2, 1.5, 1};
   Mat4 view = Mat4::lookAt(eye, Vec3{0, 0, 0}, Vec3::UP);
   Mat4 proj = Mat4::perspective(FOV_Y_DEGREES, aspect, 0.1f, 20.0f);
   return proj * view;
+}
+
+static VkFormat findDepthFormat(VkPhysicalDevice physical) {
+  static const VkFormat candidates[] = {
+      VK_FORMAT_D32_SFLOAT,
+      VK_FORMAT_D24_UNORM_S8_UINT,
+      VK_FORMAT_D32_SFLOAT_S8_UINT,
+      VK_FORMAT_D16_UNORM,
+  };
+  auto it = std::ranges::find_if(candidates, [&](VkFormat candidate) {
+    VkFormatProperties props;
+    vkGetPhysicalDeviceFormatProperties(physical, candidate, &props);
+    return props.optimalTilingFeatures &
+           VK_FORMAT_FEATURE_DEPTH_STENCIL_ATTACHMENT_BIT;
+  });
+  if (it == std::ranges::end(candidates)) {
+    std::println(stderr, "no supported depth format found");
+    exit(1);
+  }
+  return *it;
 }
 
 Renderer::Renderer(GLFWwindow &window) {
@@ -34,6 +75,12 @@ Renderer::Renderer(GLFWwindow &window) {
   m_dev = createDevice(m_instance, m_surface);
   m_sc = createSwapchain(m_dev.device, m_dev.physical, m_surface, window);
 
+  VkFormat depthFormat = findDepthFormat(m_dev.physical);
+  m_depths.resize(m_sc.imageCount);
+  for (uint32_t i = 0; i < m_sc.imageCount; ++i)
+    m_depths[i] = createDepthBuffer(m_dev.device, m_dev.physical, depthFormat,
+                                    m_sc.extent.width, m_sc.extent.height);
+
   m_tex = loadTexture(m_dev, "textures/red_brick_diff_1k.png");
 
   for (int i = 0; i < MAX_FRAMES_IN_FLIGHT; ++i)
@@ -43,8 +90,11 @@ Renderer::Renderer(GLFWwindow &window) {
 
   m_vb = createVertexBuffer(m_dev.device, m_dev.physical, VERTICES,
                             sizeof(VERTICES));
+  m_ib =
+      createIndexBuffer(m_dev.device, m_dev.physical, INDICES, sizeof(INDICES));
 
-  m_gp = createPipeline(m_dev.device, m_sc.format, m_sc.extent, m_desc.layout);
+  m_gp = createPipeline(m_dev.device, m_sc.format, depthFormat, m_sc.extent,
+                        m_desc.layout);
 
   for (int i = 0; i < MAX_FRAMES_IN_FLIGHT; ++i)
     m_cmd[i] = createCmd(m_dev.device, m_dev.queueFamily);
@@ -93,8 +143,10 @@ void Renderer::drawFrame() {
   memcpy(m_ubos[m_frame].mapped, &uboData, sizeof(UBO));
 
   recordFrame(m_cmd[m_frame].cmd, m_gp.pipeline, m_gp.layout, m_vb.buffer,
-              m_desc.sets[m_frame], m_sc.images[imageIndex],
-              m_sc.views[imageIndex], m_sc.extent, std::ranges::size(VERTICES));
+              m_ib.buffer, std::ranges::size(INDICES), m_desc.sets[m_frame],
+              m_sc.images[imageIndex], m_sc.views[imageIndex],
+              m_depths[imageIndex].image, m_depths[imageIndex].view,
+              m_sc.extent);
 
   VkPipelineStageFlags waitStage =
       VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
@@ -147,6 +199,15 @@ Renderer::~Renderer() {
 
   vkDestroyBuffer(device, m_vb.buffer, nullptr);
   vkFreeMemory(device, m_vb.memory, nullptr);
+
+  vkDestroyBuffer(device, m_ib.buffer, nullptr);
+  vkFreeMemory(device, m_ib.memory, nullptr);
+
+  for (DepthBuffer depth : m_depths) {
+    vkDestroyImageView(device, depth.view, nullptr);
+    vkDestroyImage(device, depth.image, nullptr);
+    vkFreeMemory(device, depth.memory, nullptr);
+  }
 
   vkDestroySampler(device, m_tex.sampler, nullptr);
   vkDestroyImageView(device, m_tex.view, nullptr);

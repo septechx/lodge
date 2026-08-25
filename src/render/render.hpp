@@ -11,5 +11,7 @@ CmdBundle createCmd(VkDevice device, uint32_t queueFamily);
 
 void recordFrame(VkCommandBuffer cmd, VkPipeline pipeline,
                  VkPipelineLayout layout, VkBuffer vertexBuffer,
+                 VkBuffer indexBuffer, uint32_t indexCount,
                  VkDescriptorSet texSet, VkImage image, VkImageView view,
-                 const VkExtent2D &extent, uint32_t vertexCount);
+                 VkImage depthImage, VkImageView depthView,
+                 const VkExtent2D &extent);

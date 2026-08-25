@@ -1,10 +1,11 @@
 #include <cstring>
 #include <print>
+#include <vulkan/vulkan_core.h>
 
+#include "../consts.hpp"
 #include "../utils.hpp"
 #include "allocator.hpp"
 #include "pipeline.hpp"
-#include "src/consts.hpp"
 #include "utils.hpp"
 #include "vertex.hpp"
 
@@ -44,6 +45,36 @@ static ShaderModules loadShaders(VkDevice device) {
   return modules;
 }
 
+AllocatedBuffer createVertexBuffer(VkDevice device, VkPhysicalDevice physical,
+                                   const void *data, VkDeviceSize size) {
+  AllocatedBuffer buf =
+      createBuffer(device, physical, size, VK_BUFFER_USAGE_VERTEX_BUFFER_BIT,
+                   VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT |
+                       VK_MEMORY_PROPERTY_HOST_COHERENT_BIT);
+  void *dst = nullptr;
+  CHECK_VK(vkMapMemory(device, buf.memory, 0, size, 0, &dst),
+           "map vertex memory");
+  memcpy(dst, data, static_cast<size_t>(size));
+  vkUnmapMemory(device, buf.memory);
+
+  return buf;
+}
+
+AllocatedBuffer createIndexBuffer(VkDevice device, VkPhysicalDevice physical,
+                                  const void *data, VkDeviceSize size) {
+  AllocatedBuffer buf =
+      createBuffer(device, physical, size, VK_BUFFER_USAGE_INDEX_BUFFER_BIT,
+                   VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT |
+                       VK_MEMORY_PROPERTY_HOST_COHERENT_BIT);
+  void *dst = nullptr;
+  CHECK_VK(vkMapMemory(device, buf.memory, 0, size, 0, &dst),
+           "map index memory");
+  memcpy(dst, data, static_cast<size_t>(size));
+  vkUnmapMemory(device, buf.memory);
+
+  return buf;
+}
+
 UniformBuffer createUniformBuffer(VkDevice device, VkPhysicalDevice physical) {
   AllocatedBuffer buf = createBuffer(device, physical, sizeof(UBO),
                                      VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT,
@@ -55,19 +86,23 @@ UniformBuffer createUniformBuffer(VkDevice device, VkPhysicalDevice physical) {
   return UniformBuffer{buf.buffer, buf.memory, static_cast<UBO *>(mapped)};
 }
 
-VertexBuffer createVertexBuffer(VkDevice device, VkPhysicalDevice physical,
-                                const void *data, VkDeviceSize size) {
-  AllocatedBuffer buf =
-      createBuffer(device, physical, size, VK_BUFFER_USAGE_VERTEX_BUFFER_BIT,
-                   VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT |
-                       VK_MEMORY_PROPERTY_HOST_COHERENT_BIT);
-  void *dst = nullptr;
-  CHECK_VK(vkMapMemory(device, buf.memory, 0, size, 0, &dst),
-           "map vertex memory");
-  memcpy(dst, data, static_cast<size_t>(size));
-  vkUnmapMemory(device, buf.memory);
+DepthBuffer createDepthBuffer(VkDevice device, VkPhysicalDevice physical,
+                              VkFormat format, uint32_t width,
+                              uint32_t height) {
+  AllocatedImage img = createImage(device, physical, width, height, format,
+                                   VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT);
 
-  return VertexBuffer{buf.buffer, buf.memory};
+  VkImageViewCreateInfo vi = {
+      .sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO,
+      .image = img.image,
+      .viewType = VK_IMAGE_VIEW_TYPE_2D,
+      .format = format,
+      .subresourceRange = {VK_IMAGE_ASPECT_DEPTH_BIT, 0, 1, 0, 1},
+  };
+  VkImageView view;
+  CHECK_VK(vkCreateImageView(device, &vi, nullptr, &view), "create depth view");
+
+  return DepthBuffer{img.image, img.memory, view, format};
 }
 
 SceneDescriptors createSceneDescriptors(VkDevice device, Texture tex,
@@ -151,8 +186,8 @@ SceneDescriptors createSceneDescriptors(VkDevice device, Texture tex,
   return SceneDescriptors{setLayout, pool, {sets[0], sets[1]}};
 }
 
-GraphicsPipeline createPipeline(VkDevice device, VkFormat format,
-                                const VkExtent2D &extent,
+GraphicsPipeline createPipeline(VkDevice device, VkFormat colorFormat,
+                                VkFormat depthFormat, const VkExtent2D &extent,
                                 VkDescriptorSetLayout setLayout) {
   ShaderModules modules = loadShaders(device);
 
@@ -215,12 +250,21 @@ GraphicsPipeline createPipeline(VkDevice device, VkFormat format,
   VkPipelineRasterizationStateCreateInfo raster = {
       .sType = VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_CREATE_INFO,
       .polygonMode = VK_POLYGON_MODE_FILL,
-      .cullMode = VK_CULL_MODE_NONE,
+      .cullMode = VK_CULL_MODE_BACK_BIT,
       .lineWidth = 1.0f,
   };
   VkPipelineMultisampleStateCreateInfo multisample = {
       .sType = VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO,
       .rasterizationSamples = VK_SAMPLE_COUNT_1_BIT,
+  };
+
+  VkPipelineDepthStencilStateCreateInfo depthStencil = {
+      .sType = VK_STRUCTURE_TYPE_PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO,
+      .depthTestEnable = VK_TRUE,
+      .depthWriteEnable = VK_TRUE,
+      .depthCompareOp = VK_COMPARE_OP_LESS,
+      .minDepthBounds = 0.0f,
+      .maxDepthBounds = 1.0f,
   };
 
   VkPipelineColorBlendAttachmentState blendAttach = {
@@ -237,7 +281,8 @@ GraphicsPipeline createPipeline(VkDevice device, VkFormat format,
   VkPipelineRenderingCreateInfo rendering = {
       .sType = VK_STRUCTURE_TYPE_PIPELINE_RENDERING_CREATE_INFO,
       .colorAttachmentCount = 1,
-      .pColorAttachmentFormats = &format,
+      .pColorAttachmentFormats = &colorFormat,
+      .depthAttachmentFormat = depthFormat,
   };
 
   VkDynamicState dyn[] = {VK_DYNAMIC_STATE_VIEWPORT, VK_DYNAMIC_STATE_SCISSOR};
@@ -266,6 +311,7 @@ GraphicsPipeline createPipeline(VkDevice device, VkFormat format,
       .pViewportState = &viewportState,
       .pRasterizationState = &raster,
       .pMultisampleState = &multisample,
+      .pDepthStencilState = &depthStencil,
       .pColorBlendState = &colorBlend,
       .pDynamicState = &dynamicState,
       .layout = layout,

@@ -21,10 +21,12 @@ private:
   VkSurfaceKHR m_surface;
   Device m_dev;
   Swapchain m_sc;
+  std::vector<DepthBuffer> m_depths;
   Texture m_tex;
   UniformBuffer m_ubos[MAX_FRAMES_IN_FLIGHT];
   SceneDescriptors m_desc;
-  VertexBuffer m_vb;
+  AllocatedBuffer m_vb;
+  AllocatedBuffer m_ib;
   GraphicsPipeline m_gp;
   CmdBundle m_cmd[MAX_FRAMES_IN_FLIGHT];
   std::vector<VkSemaphore> m_submitSem;

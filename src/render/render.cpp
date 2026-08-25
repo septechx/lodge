@@ -1,5 +1,6 @@
 #include "render.hpp"
 #include "utils.hpp"
+#include <vulkan/vulkan_core.h>
 
 CmdBundle createCmd(VkDevice device, uint32_t queueFamily) {
   VkCommandPoolCreateInfo cpi = {
@@ -25,51 +26,73 @@ CmdBundle createCmd(VkDevice device, uint32_t queueFamily) {
 
 void recordFrame(VkCommandBuffer cmd, VkPipeline pipeline,
                  VkPipelineLayout layout, VkBuffer vertexBuffer,
+                 VkBuffer indexBuffer, uint32_t indexCount,
                  VkDescriptorSet texSet, VkImage image, VkImageView view,
-                 const VkExtent2D &extent, uint32_t vertexCount) {
+                 VkImage depthImage, VkImageView depthView,
+                 const VkExtent2D &extent) {
 
   VkCommandBufferBeginInfo begin = {
       .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO,
   };
   CHECK_VK(vkBeginCommandBuffer(cmd, &begin), "begin cmd buffer");
 
-  VkImageMemoryBarrier2 toRenderable = {
-      .sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2,
-      .srcStageMask = VK_PIPELINE_STAGE_2_TOP_OF_PIPE_BIT,
-      .srcAccessMask = 0,
-      .dstStageMask = VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT,
-      .dstAccessMask = VK_ACCESS_2_COLOR_ATTACHMENT_WRITE_BIT,
-      .oldLayout = VK_IMAGE_LAYOUT_UNDEFINED,
-      .newLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
-      .srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
-      .dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
-      .image = image,
-      .subresourceRange = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1},
-  };
+  VkImageMemoryBarrier2 toRenderable[2] = {
+      {
+          .sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2,
+          .srcStageMask = VK_PIPELINE_STAGE_2_TOP_OF_PIPE_BIT,
+          .srcAccessMask = 0,
+          .dstStageMask = VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT,
+          .dstAccessMask = VK_ACCESS_2_COLOR_ATTACHMENT_WRITE_BIT,
+          .oldLayout = VK_IMAGE_LAYOUT_UNDEFINED,
+          .newLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
+          .srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
+          .dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
+          .image = image,
+          .subresourceRange = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1},
+      },
+      {
+          .sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2,
+          .srcStageMask = VK_PIPELINE_STAGE_2_TOP_OF_PIPE_BIT,
+          .srcAccessMask = 0,
+          .dstStageMask = VK_PIPELINE_STAGE_2_EARLY_FRAGMENT_TESTS_BIT,
+          .dstAccessMask = VK_ACCESS_2_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT,
+          .oldLayout = VK_IMAGE_LAYOUT_UNDEFINED,
+          .newLayout = VK_IMAGE_LAYOUT_DEPTH_ATTACHMENT_OPTIMAL,
+          .srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
+          .dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
+          .image = depthImage,
+          .subresourceRange = {VK_IMAGE_ASPECT_DEPTH_BIT, 0, 1, 0, 1},
+      }};
   VkDependencyInfo dep0 = {
       .sType = VK_STRUCTURE_TYPE_DEPENDENCY_INFO,
-      .imageMemoryBarrierCount = 1,
-      .pImageMemoryBarriers = &toRenderable,
+      .imageMemoryBarrierCount = 2,
+      .pImageMemoryBarriers = toRenderable,
   };
   vkCmdPipelineBarrier2(cmd, &dep0);
 
-  const float clearColor[4] = {0.00f, 0.00f, 0.00f, 1.0f};
   VkRenderingAttachmentInfo colorAttachment = {
       .sType = VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO,
       .imageView = view,
       .imageLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
       .loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR,
       .storeOp = VK_ATTACHMENT_STORE_OP_STORE,
-      .clearValue = {.color = {{clearColor[0], clearColor[1], clearColor[2],
-                                1.0f}}},
+      .clearValue = {.color = {{0.0f, 0.0f, 0.0f, 1.0f}}},
   };
-
+  VkRenderingAttachmentInfo depthAttachment = {
+      .sType = VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO,
+      .imageView = depthView,
+      .imageLayout = VK_IMAGE_LAYOUT_DEPTH_ATTACHMENT_OPTIMAL,
+      .loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR,
+      .storeOp = VK_ATTACHMENT_STORE_OP_DONT_CARE,
+      .clearValue = {.depthStencil = {1.0f, 0}},
+  };
   VkRenderingInfo rendering = {
       .sType = VK_STRUCTURE_TYPE_RENDERING_INFO,
       .renderArea = {{0, 0}, extent},
       .layerCount = 1,
       .colorAttachmentCount = 1,
       .pColorAttachments = &colorAttachment,
+      .pDepthAttachment = &depthAttachment,
   };
   vkCmdBeginRendering(cmd, &rendering);
 
@@ -92,8 +115,9 @@ void recordFrame(VkCommandBuffer cmd, VkPipeline pipeline,
 
   VkDeviceSize offset = 0;
   vkCmdBindVertexBuffers(cmd, 0, 1, &vertexBuffer, &offset);
+  vkCmdBindIndexBuffer(cmd, indexBuffer, 0, VK_INDEX_TYPE_UINT16);
 
-  vkCmdDraw(cmd, vertexCount, 1, 0, 0);
+  vkCmdDrawIndexed(cmd, indexCount, 1, 0, 0, 0);
 
   vkCmdEndRendering(cmd);
 
