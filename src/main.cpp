@@ -12,13 +12,29 @@
 #include "render/renderer.hpp"
 #include "utils.hpp"
 
-class QuitLayer final : public Layer {
+class ControlLayer final : public Layer {
 public:
+  constexpr ControlLayer(GLFWwindow &window) : m_window(window) {}
+
   bool onEvent(const Event &event) override {
     const auto *key = std::get_if<events::KeyPressed>(&event);
-    if (key != nullptr && key->key == GLFW_KEY_ESCAPE) {
-      m_shouldQuit = true;
-      return true;
+    if (key != nullptr) {
+      if (key->key == GLFW_KEY_ESCAPE) {
+        m_shouldQuit = true;
+        return true;
+      } else if (key->key == GLFW_KEY_F11) {
+        if (m_isFullscreen) {
+          glfwSetWindowMonitor(&m_window, nullptr, 0, 0, WIDTH, HEIGHT, 0);
+          m_isFullscreen = false;
+        } else {
+          GLFWmonitor *monitor = glfwGetPrimaryMonitor();
+          const GLFWvidmode *videoMode = glfwGetVideoMode(monitor);
+          glfwSetWindowMonitor(&m_window, monitor, 0, 0, videoMode->width,
+                               videoMode->height, videoMode->refreshRate);
+          m_isFullscreen = true;
+        }
+        return true;
+      }
     }
     return false;
   }
@@ -27,6 +43,8 @@ public:
 
 private:
   bool m_shouldQuit = false;
+  bool m_isFullscreen = false;
+  GLFWwindow &m_window;
 };
 
 int main() {
@@ -54,11 +72,11 @@ int main() {
   events.attach(*window.get());
 
   LayerStack layers;
-  QuitLayer quitLayer;
-  layers.pushOverlay(quitLayer);
+  ControlLayer controlLayer(*window.get());
+  layers.pushOverlay(controlLayer);
 
   auto last = std::chrono::steady_clock::now();
-  while (!glfwWindowShouldClose(window.get()) && !quitLayer.shouldQuit()) {
+  while (!glfwWindowShouldClose(window.get()) && !controlLayer.shouldQuit()) {
     auto now = std::chrono::steady_clock::now();
     float dt = std::chrono::duration<float>(now - last).count();
     last = now;
