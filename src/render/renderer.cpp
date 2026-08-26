@@ -38,9 +38,9 @@ static const uint16_t INDICES[36] = {
 };
 
 static const RenderObject OBJECTS[3] = {
-    {{0.0f, 0.0f, 0.0f}, {0.00f, 0.00f, 0.00f}, 1.00f},
-    {{0.0f, 0.0f, 3.0f}, {0.26f, 0.61f, 0.00f}, 0.65f},
-    {{0.0f, 0.0f, -3.0f}, {0.00f, -0.35f, 0.44f}, 0.85f},
+    {{-3.0f, 0.0f, 0.0f}, {0.00f, LDG_PI / 4, 0.00f}, 1.0f},
+    {{0.0f, 0.0f, 0.0f}, {LDG_PI / 4, 0.00f, 0.00f}, 1.0f},
+    {{3.0f, 0.0f, 0.0f}, {0.00f, 0.00f, LDG_PI / 4}, 1.0f},
 };
 
 static VkFormat findDepthFormat(VkPhysicalDevice physical) {

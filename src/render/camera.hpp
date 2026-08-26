@@ -5,7 +5,7 @@
 #include "../math/Vec3.hpp"
 
 struct Camera {
-  Vec3 eye{2.0f, 1.5f, 1.0f};
+  Vec3 eye{0.0f, 1.0f, 1.0f};
   Vec3 center{0.0f, 0.0f, 0.0f};
   Vec3 up{0.0f, 1.0f, 0.0f};
   float fovY = FOV_Y_DEGREES;
