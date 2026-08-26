@@ -72,9 +72,9 @@ public:
     float s = std::sin(rad);
     Mat4 r = IDENTITY;
     r(1, 1) = c;
-    r(1, 2) = s;
-    r(2, 1) = -s;
-    r(3, 3) = c;
+    r(1, 2) = -s;
+    r(2, 1) = s;
+    r(2, 2) = c;
     return r;
   }
 
@@ -93,13 +93,9 @@ public:
     float c = std::cos(rad);
     float s = std::sin(rad);
     Mat4 r = IDENTITY;
-    // 0  1  2  3
-    // 4  5  6  7
-    // 8  9  10 11
-    // 12 13 14 15
     r(0, 0) = c;
-    r(0, 1) = s;
-    r(1, 0) = -s;
+    r(0, 1) = -s;
+    r(1, 0) = s;
     r(1, 1) = c;
     return r;
   }
