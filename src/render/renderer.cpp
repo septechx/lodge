@@ -1,7 +1,7 @@
 #include "renderer.hpp"
 
+#include "../asset/model/load.hpp"
 #include "../consts.hpp"
-#include "../gltf/load.hpp"
 #include "imgui.h"
 #include "imgui_impl_vulkan.h"
 #include "render.hpp"

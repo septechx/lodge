@@ -1,9 +1,9 @@
 #include "load.hpp"
 
-#include "../math/Quat.hpp"
-#include "../utils.hpp"
-#include "src/render/allocator.hpp"
-#include "src/render/pipeline.hpp"
+#include "../../math/Quat.hpp"
+#include "../../render/allocator.hpp"
+#include "../../render/pipeline.hpp"
+#include "../../utils.hpp"
 #include "tiny_gltf_v3.h"
 
 #include <cstdint>

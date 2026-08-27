@@ -1,9 +1,9 @@
 #pragma once
 
+#include "../asset/texture/load.hpp"
 #include "../consts.hpp"
 #include "../math/Mat4.hpp"
 #include "allocator.hpp"
-#include "texture.hpp"
 #include <vulkan/vulkan.h>
 
 AllocatedBuffer createVertexBuffer(VkDevice device, VkPhysicalDevice physical,

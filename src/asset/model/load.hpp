@@ -1,7 +1,7 @@
 #pragma once
 
-#include "../render/init.hpp"
-#include "../render/render_object.hpp"
+#include "../../render/init.hpp"
+#include "../../render/render_object.hpp"
 
 #include <filesystem>
 

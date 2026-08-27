@@ -3,11 +3,11 @@
 #define GLFW_INCLUDE_VULKAN
 #include <GLFW/glfw3.h>
 
+#include "../asset/texture/load.hpp"
 #include "camera.hpp"
 #include "init.hpp"
 #include "pipeline.hpp"
 #include "render.hpp"
-#include "texture.hpp"
 
 #include <vector>
 

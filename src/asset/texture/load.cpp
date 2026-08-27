@@ -1,11 +1,11 @@
-#include "texture.hpp"
+#include "load.hpp"
 
 #define STB_IMAGE_IMPLEMENTATION
 #include "stb_image.h"
 
-#include "allocator.hpp"
-#include "init.hpp"
-#include "utils.hpp"
+#include "../../render/allocator.hpp"
+#include "../../render/init.hpp"
+#include "../../render/utils.hpp"
 
 #include <cstring>
 #include <print>
