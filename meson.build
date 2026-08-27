@@ -58,3 +58,18 @@ executable(
   include_directories: imgui_include,
   cpp_args: ['-Wno-missing-field-initializers'],
 )
+
+catch2_dep = dependency('catch2-with-main', required: false)
+if not catch2_dep.found()
+  catch2_dep = dependency('catch2', required: false)
+endif
+
+if catch2_dep.found()
+  test_math = executable(
+    'test_math',
+    'tests/test_math.cpp',
+    dependencies: catch2_dep,
+    include_directories: include_directories('src', 'thirdparty/imgui', 'thirdparty/imgui/backends'),
+  )
+  test('math', test_math)
+endif

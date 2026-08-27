@@ -3,3 +3,6 @@ run *args="--debug": build
 
 build:
   ninja -C build
+
+test:
+  meson test -C build --verbose

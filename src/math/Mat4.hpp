@@ -1,7 +1,7 @@
 #pragma once
 
 #include "Vec3.hpp"
-#include "math.h"
+#include "math.hpp"
 
 #include <array>
 #include <cmath>
