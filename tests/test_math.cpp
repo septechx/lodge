@@ -3,6 +3,7 @@
 
 #include "math/Mat4.hpp"
 #include "math/Quat.hpp"
+#include "math/Vec2.hpp"
 #include "math/Vec3.hpp"
 #include "math/math.hpp"
 
@@ -16,9 +17,13 @@ static bool approxEqual(float a, float b, float eps = EPS) {
   return std::abs(a - b) <= eps;
 }
 
-static bool vecAlmostEqual(Vec3 a, Vec3 b, float eps = EPS) {
+static bool vec3AlmostEqual(Vec3 a, Vec3 b, float eps = EPS) {
   return approxEqual(a.x, b.x, eps) && approxEqual(a.y, b.y, eps) &&
          approxEqual(a.z, b.z, eps);
+}
+
+static bool vec2AlmostEqual(Vec2 a, Vec2 b, float eps = EPS) {
+  return approxEqual(a.x, b.x, eps) && approxEqual(a.y, b.y, eps);
 }
 
 static bool matAlmostEqual(const Mat4 &a, const Mat4 &b, float eps = EPS) {
@@ -97,20 +102,20 @@ TEST_CASE("Vec3 dot product", "[Vec3]") {
 TEST_CASE("Vec3 cross product", "[Vec3]") {
   SECTION("basis vectors") {
     Vec3 i{1, 0, 0}, j{0, 1, 0}, k{0, 0, 1};
-    REQUIRE(vecAlmostEqual(i.cross(j), k));
-    REQUIRE(vecAlmostEqual(j.cross(k), i));
-    REQUIRE(vecAlmostEqual(k.cross(i), j));
+    REQUIRE(vec3AlmostEqual(i.cross(j), k));
+    REQUIRE(vec3AlmostEqual(j.cross(k), i));
+    REQUIRE(vec3AlmostEqual(k.cross(i), j));
   }
   SECTION("anti-commutativity") {
     Vec3 a{1, 2, 3}, b{4, 5, 6};
     Vec3 ab = a.cross(b);
     Vec3 ba = b.cross(a);
-    REQUIRE(vecAlmostEqual(ab, {-ba.x, -ba.y, -ba.z}));
+    REQUIRE(vec3AlmostEqual(ab, {-ba.x, -ba.y, -ba.z}));
   }
   SECTION("parallel vectors cross zero") {
     Vec3 a{1, 2, 3}, b{2, 4, 6};
-    REQUIRE(vecAlmostEqual(a.cross(b), {0, 0, 0}));
-    REQUIRE(vecAlmostEqual(a.cross(a), {0, 0, 0}));
+    REQUIRE(vec3AlmostEqual(a.cross(b), {0, 0, 0}));
+    REQUIRE(vec3AlmostEqual(a.cross(a), {0, 0, 0}));
   }
   SECTION("orthogonal magnitude") {
     Vec3 a{1, 0, 0}, b{0, 2, 0};
@@ -126,7 +131,7 @@ TEST_CASE("Vec3 cross product", "[Vec3]") {
   }
   SECTION("general cross") {
     Vec3 a{2, 3, 4}, b{5, 6, 7};
-    REQUIRE(vecAlmostEqual(a.cross(b), {-3, 6, -3}));
+    REQUIRE(vec3AlmostEqual(a.cross(b), {-3, 6, -3}));
   }
 }
 
@@ -159,16 +164,16 @@ TEST_CASE("Vec3 length", "[Vec3]") {
 TEST_CASE("Vec3 normalize", "[Vec3]") {
   SECTION("already normalized") {
     Vec3 a{1, 0, 0};
-    REQUIRE(vecAlmostEqual(a.normalize(), {1, 0, 0}));
+    REQUIRE(vec3AlmostEqual(a.normalize(), {1, 0, 0}));
   }
   SECTION("scaling to unit") {
     Vec3 a{2, 0, 0};
-    REQUIRE(vecAlmostEqual(a.normalize(), {1, 0, 0}));
+    REQUIRE(vec3AlmostEqual(a.normalize(), {1, 0, 0}));
     REQUIRE(a.normalize().length() == Catch::Approx(1.0f).margin(EPS));
   }
   SECTION("arbitrary vector") {
     Vec3 a{0, 3, 4};
-    REQUIRE(vecAlmostEqual(a.normalize(), {0, 0.6f, 0.8f}));
+    REQUIRE(vec3AlmostEqual(a.normalize(), {0, 0.6f, 0.8f}));
     REQUIRE(a.normalize().length() == Catch::Approx(1.0f).margin(EPS));
   }
   SECTION("normalized length is one") {
@@ -182,45 +187,170 @@ TEST_CASE("Vec3 normalize", "[Vec3]") {
   }
   SECTION("negative vector") {
     Vec3 a{-2, 0, 0};
-    REQUIRE(vecAlmostEqual(a.normalize(), {-1, 0, 0}));
+    REQUIRE(vec3AlmostEqual(a.normalize(), {-1, 0, 0}));
   }
 }
 
 TEST_CASE("Vec3 arithmetic", "[Vec3]") {
   SECTION("addition") {
     Vec3 a{1, 2, 3}, b{4, 5, 6};
-    REQUIRE(vecAlmostEqual(a + b, {5, 7, 9}));
+    REQUIRE(vec3AlmostEqual(a + b, {5, 7, 9}));
   }
   SECTION("addition with zero") {
     Vec3 a{1, 2, 3}, z{0, 0, 0};
-    REQUIRE(vecAlmostEqual(a + z, a));
+    REQUIRE(vec3AlmostEqual(a + z, a));
   }
   SECTION("addition commutes") {
     Vec3 a{1, 2, 3}, b{4, 5, 6};
-    REQUIRE(vecAlmostEqual(a + b, b + a));
+    REQUIRE(vec3AlmostEqual(a + b, b + a));
   }
   SECTION("subtraction") {
     Vec3 a{4, 5, 6}, b{1, 2, 3};
-    REQUIRE(vecAlmostEqual(a - b, {3, 3, 3}));
+    REQUIRE(vec3AlmostEqual(a - b, {3, 3, 3}));
   }
   SECTION("subtract self is zero") {
     Vec3 a{1, 2, 3};
-    REQUIRE(vecAlmostEqual(a - a, {0, 0, 0}));
+    REQUIRE(vec3AlmostEqual(a - a, {0, 0, 0}));
   }
   SECTION("scalar multiplication") {
     Vec3 a{1, 2, 3};
-    REQUIRE(vecAlmostEqual(a * 2.0f, {2, 4, 6}));
-    REQUIRE(vecAlmostEqual(a * 0.0f, {0, 0, 0}));
-    REQUIRE(vecAlmostEqual(a * -1.0f, {-1, -2, -3}));
+    REQUIRE(vec3AlmostEqual(a * 2.0f, {2, 4, 6}));
+    REQUIRE(vec3AlmostEqual(a * 0.0f, {0, 0, 0}));
+    REQUIRE(vec3AlmostEqual(a * -1.0f, {-1, -2, -3}));
   }
   SECTION("scalar multiplication commutes with free function") {
     Vec3 a{1, 2, 3};
-    REQUIRE(vecAlmostEqual(a * 3.0f, 3.0f * a));
+    REQUIRE(vec3AlmostEqual(a * 3.0f, 3.0f * a));
   }
   SECTION("distributivity") {
     Vec3 a{1, 2, 3}, b{4, 5, 6};
     float s = 2.0f;
-    REQUIRE(vecAlmostEqual((a + b) * s, a * s + b * s));
+    REQUIRE(vec3AlmostEqual((a + b) * s, a * s + b * s));
+  }
+}
+
+// ============================================================
+// Vec2
+// ============================================================
+
+TEST_CASE("Vec2 dot product", "[Vec2]") {
+  SECTION("orthogonal vectors dot to zero") {
+    Vec2 a{1, 0}, b{0, 1};
+    REQUIRE(a.dot(b) == Catch::Approx(0.0f).margin(EPS));
+    REQUIRE(b.dot(a) == Catch::Approx(0.0f).margin(EPS));
+  }
+  SECTION("parallel vectors") {
+    Vec2 a{1, 0}, b{1, 0};
+    REQUIRE(a.dot(b) == Catch::Approx(1.0f).margin(EPS));
+  }
+  SECTION("self dot equals length squared") {
+    Vec2 a{1, 2};
+    REQUIRE(a.dot(a) == Catch::Approx(a.length() * a.length()).margin(EPS));
+  }
+  SECTION("commutativity") {
+    Vec2 a{1, 2}, b{4, -6};
+    REQUIRE(a.dot(b) == Catch::Approx(b.dot(a)).margin(EPS));
+  }
+  SECTION("zero vector") {
+    Vec2 z{0, 0}, a{1, 2};
+    REQUIRE(z.dot(a) == Catch::Approx(0.0f).margin(EPS));
+  }
+  SECTION("negative values") {
+    Vec2 a{-1, -2}, b{1, 2};
+    REQUIRE(a.dot(b) == Catch::Approx(-5.0f).margin(EPS));
+  }
+  SECTION("known values") {
+    Vec2 a{1, 2}, b{4, 5};
+    REQUIRE(a.dot(b) == Catch::Approx(14.0f).margin(EPS));
+  }
+}
+
+TEST_CASE("Vec2 length", "[Vec2]") {
+  SECTION("zero vector") {
+    Vec2 z{0, 0};
+    REQUIRE(z.length() == Catch::Approx(0.0f).margin(EPS));
+  }
+  SECTION("unit vectors") {
+    REQUIRE(Vec2{1, 0}.length() == Catch::Approx(1.0f).margin(EPS));
+    REQUIRE(Vec2{0, 1}.length() == Catch::Approx(1.0f).margin(EPS));
+  }
+  SECTION("general") {
+    REQUIRE(Vec2{2, 2}.length() == Catch::Approx(std::sqrt(8)).margin(EPS));
+  }
+  SECTION("negative components") {
+    REQUIRE(Vec2{-2, -2}.length() == Catch::Approx(std::sqrt(8)).margin(EPS));
+  }
+  SECTION("length squared") {
+    Vec2 a{1, 2};
+    REQUIRE(a.length() * a.length() == Catch::Approx(a.dot(a)).margin(EPS));
+  }
+}
+
+TEST_CASE("Vec2 normalize", "[Vec2]") {
+  SECTION("already normalized") {
+    Vec2 a{1, 0};
+    REQUIRE(vec2AlmostEqual(a.normalize(), {1, 0}));
+  }
+  SECTION("scaling to unit") {
+    Vec2 a{2, 0};
+    REQUIRE(vec2AlmostEqual(a.normalize(), {1, 0}));
+    REQUIRE(a.normalize().length() == Catch::Approx(1.0f).margin(EPS));
+  }
+  SECTION("arbitrary vector") {
+    Vec2 a{3, 4};
+    REQUIRE(vec2AlmostEqual(a.normalize(), {0.6f, 0.8f}));
+    REQUIRE(a.normalize().length() == Catch::Approx(1.0f).margin(EPS));
+  }
+  SECTION("normalized length is one") {
+    Vec2 a{1, 2};
+    REQUIRE(a.normalize().length() == Catch::Approx(1.0f).margin(1e-4f));
+  }
+  SECTION("direction preserved") {
+    Vec2 a{5, -3};
+    Vec2 n = a.normalize();
+    REQUIRE(n.dot(a.normalize()) == Catch::Approx(1.0f).margin(EPS));
+  }
+  SECTION("negative vector") {
+    Vec2 a{-2, 0};
+    REQUIRE(vec2AlmostEqual(a.normalize(), {-1, 0}));
+  }
+}
+
+TEST_CASE("Vec2 arithmetic", "[Vec2]") {
+  SECTION("addition") {
+    Vec2 a{1, 2}, b{4, 5};
+    REQUIRE(vec2AlmostEqual(a + b, {5, 7}));
+  }
+  SECTION("addition with zero") {
+    Vec2 a{1, 2}, z{0, 0};
+    REQUIRE(vec2AlmostEqual(a + z, a));
+  }
+  SECTION("addition commutes") {
+    Vec2 a{1, 2}, b{4, 5};
+    REQUIRE(vec2AlmostEqual(a + b, b + a));
+  }
+  SECTION("subtraction") {
+    Vec2 a{4, 5}, b{1, 2};
+    REQUIRE(vec2AlmostEqual(a - b, {3, 3}));
+  }
+  SECTION("subtract self is zero") {
+    Vec2 a{1, 2};
+    REQUIRE(vec2AlmostEqual(a - a, {0, 0}));
+  }
+  SECTION("scalar multiplication") {
+    Vec2 a{1, 2};
+    REQUIRE(vec2AlmostEqual(a * 2.0f, {2, 4}));
+    REQUIRE(vec2AlmostEqual(a * 0.0f, {0, 0}));
+    REQUIRE(vec2AlmostEqual(a * -1.0f, {-1, -2}));
+  }
+  SECTION("scalar multiplication commutes with free function") {
+    Vec2 a{1, 2};
+    REQUIRE(vec2AlmostEqual(a * 3.0f, 3.0f * a));
+  }
+  SECTION("distributivity") {
+    Vec2 a{1, 2}, b{4, 5};
+    float s = 2.0f;
+    REQUIRE(vec2AlmostEqual((a + b) * s, a * s + b * s));
   }
 }
 
@@ -309,7 +439,7 @@ TEST_CASE("Mat4 lookAt", "[Mat4]") {
     Vec3 eye{2, 3, 5}, center{0, 0, 0}, up{0, 1, 0};
     Mat4 v = Mat4::lookAt(eye, center, up);
     Vec3 transformed = transformPoint(v, eye);
-    REQUIRE(vecAlmostEqual(transformed, {0, 0, 0}, 1e-4f));
+    REQUIRE(vec3AlmostEqual(transformed, {0, 0, 0}, 1e-4f));
   }
   SECTION("columns are orthonormal") {
     Vec3 eye{1, 2, 3}, center{0, 0, 0}, up{0, 1, 0};
@@ -344,7 +474,7 @@ TEST_CASE("Mat4 translate", "[Mat4]") {
   SECTION("transforms point") {
     Mat4 t = Mat4::translate({5, -2, 3});
     Vec3 p{1, 1, 1};
-    REQUIRE(vecAlmostEqual(transformPoint(t, p), {6, -1, 4}));
+    REQUIRE(vec3AlmostEqual(transformPoint(t, p), {6, -1, 4}));
   }
   SECTION("composition is additive") {
     Mat4 a = Mat4::translate({1, 2, 3});
@@ -369,11 +499,11 @@ TEST_CASE("Mat4 scale", "[Mat4]") {
   }
   SECTION("uniform scale transforms") {
     Mat4 m = Mat4::scale({2, 2, 2});
-    REQUIRE(vecAlmostEqual(transformVector(m, {1, 1, 1}), {2, 2, 2}));
+    REQUIRE(vec3AlmostEqual(transformVector(m, {1, 1, 1}), {2, 2, 2}));
   }
   SECTION("non-uniform scale") {
     Mat4 m = Mat4::scale({2, 3, 4});
-    REQUIRE(vecAlmostEqual(transformVector(m, {1, 1, 1}), {2, 3, 4}));
+    REQUIRE(vec3AlmostEqual(transformVector(m, {1, 1, 1}), {2, 3, 4}));
   }
   SECTION("scale by one is identity") {
     REQUIRE(matAlmostEqual(Mat4::scale({1, 1, 1}), Mat4::IDENTITY));
@@ -391,13 +521,13 @@ TEST_CASE("Mat4 rotX", "[Mat4]") {
     REQUIRE(m(1, 2) == Catch::Approx(-1.0f).margin(EPS));
     REQUIRE(m(2, 1) == Catch::Approx(1.0f).margin(EPS));
     REQUIRE(m(2, 2) == Catch::Approx(0.0f).margin(EPS));
-    REQUIRE(vecAlmostEqual(transformVector(m, {0, 1, 0}), {0, 0, 1}, 1e-4f));
+    REQUIRE(vec3AlmostEqual(transformVector(m, {0, 1, 0}), {0, 0, 1}, 1e-4f));
   }
   SECTION("pi rotation") {
     Mat4 m = Mat4::rotX(PI);
     REQUIRE(m(1, 1) == Catch::Approx(-1.0f).margin(EPS));
     REQUIRE(m(2, 2) == Catch::Approx(-1.0f).margin(EPS));
-    REQUIRE(vecAlmostEqual(transformVector(m, {0, 1, 0}), {0, -1, 0}, 1e-4f));
+    REQUIRE(vec3AlmostEqual(transformVector(m, {0, 1, 0}), {0, -1, 0}, 1e-4f));
   }
   SECTION("2pi returns to identity") {
     Mat4 m = Mat4::rotX(2.0f * PI);
@@ -420,12 +550,12 @@ TEST_CASE("Mat4 rotY", "[Mat4]") {
     REQUIRE(m(0, 2) == Catch::Approx(1.0f).margin(EPS));
     REQUIRE(m(2, 0) == Catch::Approx(-1.0f).margin(EPS));
     REQUIRE(m(2, 2) == Catch::Approx(0.0f).margin(EPS));
-    REQUIRE(vecAlmostEqual(transformVector(m, {1, 0, 0}), {0, 0, -1}, 1e-4f));
-    REQUIRE(vecAlmostEqual(transformVector(m, {0, 0, 1}), {1, 0, 0}, 1e-4f));
+    REQUIRE(vec3AlmostEqual(transformVector(m, {1, 0, 0}), {0, 0, -1}, 1e-4f));
+    REQUIRE(vec3AlmostEqual(transformVector(m, {0, 0, 1}), {1, 0, 0}, 1e-4f));
   }
   SECTION("pi rotation") {
     Mat4 m = Mat4::rotY(PI);
-    REQUIRE(vecAlmostEqual(transformVector(m, {1, 0, 0}), {-1, 0, 0}, 1e-4f));
+    REQUIRE(vec3AlmostEqual(transformVector(m, {1, 0, 0}), {-1, 0, 0}, 1e-4f));
   }
 }
 
@@ -439,12 +569,12 @@ TEST_CASE("Mat4 rotZ", "[Mat4]") {
     REQUIRE(m(0, 1) == Catch::Approx(-1.0f).margin(EPS));
     REQUIRE(m(1, 0) == Catch::Approx(1.0f).margin(EPS));
     REQUIRE(m(1, 1) == Catch::Approx(0.0f).margin(EPS));
-    REQUIRE(vecAlmostEqual(transformVector(m, {1, 0, 0}), {0, 1, 0}, 1e-4f));
-    REQUIRE(vecAlmostEqual(transformVector(m, {0, 1, 0}), {-1, 0, 0}, 1e-4f));
+    REQUIRE(vec3AlmostEqual(transformVector(m, {1, 0, 0}), {0, 1, 0}, 1e-4f));
+    REQUIRE(vec3AlmostEqual(transformVector(m, {0, 1, 0}), {-1, 0, 0}, 1e-4f));
   }
   SECTION("pi rotation") {
     Mat4 m = Mat4::rotZ(PI);
-    REQUIRE(vecAlmostEqual(transformVector(m, {1, 0, 0}), {-1, 0, 0}, 1e-4f));
+    REQUIRE(vec3AlmostEqual(transformVector(m, {1, 0, 0}), {-1, 0, 0}, 1e-4f));
   }
 }
 
@@ -497,7 +627,7 @@ TEST_CASE("Mat4 fromQuat", "[Mat4][Quat]") {
     Vec3 v{1, 2, 3};
     Vec3 rQuat = q.rotate(v);
     Vec3 rMat = transformVector(m, v);
-    REQUIRE(vecAlmostEqual(rQuat, rMat, 1e-4f));
+    REQUIRE(vec3AlmostEqual(rQuat, rMat, 1e-4f));
   }
   SECTION("handles non-normalized quat") {
     Quat q = Quat::fromAxisAngle({0, 0, 1}, PI / 2.0f);
@@ -689,38 +819,42 @@ TEST_CASE("Quat multiplication", "[Quat]") {
 TEST_CASE("Quat rotate", "[Quat]") {
   SECTION("identity rotate is no-op") {
     Vec3 v{1, 2, 3};
-    REQUIRE(vecAlmostEqual(Quat::IDENTITY.rotate(v), v));
+    REQUIRE(vec3AlmostEqual(Quat::IDENTITY.rotate(v), v));
   }
   SECTION("90 deg around Z") {
     Quat q = Quat::fromAxisAngle({0, 0, 1}, PI / 2.0f);
-    REQUIRE(vecAlmostEqual(q.normalize().rotate({1, 0, 0}), {0, 1, 0}, 1e-4f));
-    REQUIRE(vecAlmostEqual(q.normalize().rotate({0, 1, 0}), {-1, 0, 0}, 1e-4f));
+    REQUIRE(vec3AlmostEqual(q.normalize().rotate({1, 0, 0}), {0, 1, 0}, 1e-4f));
+    REQUIRE(
+        vec3AlmostEqual(q.normalize().rotate({0, 1, 0}), {-1, 0, 0}, 1e-4f));
   }
   SECTION("90 deg around Y") {
     Quat q = Quat::fromAxisAngle({0, 1, 0}, PI / 2.0f);
-    REQUIRE(vecAlmostEqual(q.normalize().rotate({1, 0, 0}), {0, 0, -1}, 1e-4f));
-    REQUIRE(vecAlmostEqual(q.normalize().rotate({0, 0, 1}), {1, 0, 0}, 1e-4f));
+    REQUIRE(
+        vec3AlmostEqual(q.normalize().rotate({1, 0, 0}), {0, 0, -1}, 1e-4f));
+    REQUIRE(vec3AlmostEqual(q.normalize().rotate({0, 0, 1}), {1, 0, 0}, 1e-4f));
   }
   SECTION("90 deg around X") {
     Quat q = Quat::fromAxisAngle({1, 0, 0}, PI / 2.0f);
-    REQUIRE(vecAlmostEqual(q.normalize().rotate({0, 1, 0}), {0, 0, 1}, 1e-4f));
-    REQUIRE(vecAlmostEqual(q.normalize().rotate({0, 0, 1}), {0, -1, 0}, 1e-4f));
+    REQUIRE(vec3AlmostEqual(q.normalize().rotate({0, 1, 0}), {0, 0, 1}, 1e-4f));
+    REQUIRE(
+        vec3AlmostEqual(q.normalize().rotate({0, 0, 1}), {0, -1, 0}, 1e-4f));
   }
   SECTION("180 deg") {
     Quat q = Quat::fromAxisAngle({0, 0, 1}, PI);
-    REQUIRE(vecAlmostEqual(q.normalize().rotate({1, 0, 0}), {-1, 0, 0}, 1e-4f));
+    REQUIRE(
+        vec3AlmostEqual(q.normalize().rotate({1, 0, 0}), {-1, 0, 0}, 1e-4f));
   }
   SECTION("360 deg is identity") {
     Quat q = Quat::fromAxisAngle({0, 1, 0}, 2.0f * PI);
     Vec3 v{1, 2, 3};
-    REQUIRE(vecAlmostEqual(q.normalize().rotate(v), v, 1e-4f));
+    REQUIRE(vec3AlmostEqual(q.normalize().rotate(v), v, 1e-4f));
   }
   SECTION("inverse rotation returns to original") {
     Quat q = Quat::fromAxisAngle({1, 1, 1}, PI / 3.0f).normalize();
     Vec3 v{1, 2, 3};
     Vec3 rotated = q.rotate(v);
     Vec3 back = q.conjugate().rotate(rotated);
-    REQUIRE(vecAlmostEqual(back, v, 1e-4f));
+    REQUIRE(vec3AlmostEqual(back, v, 1e-4f));
   }
   SECTION("rotate vs matrix fromQuat consistency") {
     Quat q = Quat::fromAxisAngle({0, 1, 0}, PI / 4.0f).normalize();
@@ -728,7 +862,7 @@ TEST_CASE("Quat rotate", "[Quat]") {
     Vec3 rQuat = q.rotate(v);
     Mat4 m = Mat4::fromQuat(q);
     Vec3 rMat = transformVector(m, v);
-    REQUIRE(vecAlmostEqual(rQuat, rMat, 1e-4f));
+    REQUIRE(vec3AlmostEqual(rQuat, rMat, 1e-4f));
   }
   SECTION("rotate composition equals quat multiplication") {
     Quat a = Quat::fromAxisAngle({1, 0, 0}, PI / 4.0f).normalize();
@@ -737,6 +871,6 @@ TEST_CASE("Quat rotate", "[Quat]") {
     Quat combined = a * b;
     Vec3 rCombined = combined.rotate(v);
     Vec3 rSequential = a.rotate(b.rotate(v));
-    REQUIRE(vecAlmostEqual(rCombined, rSequential, 1e-4f));
+    REQUIRE(vec3AlmostEqual(rCombined, rSequential, 1e-4f));
   }
 }
