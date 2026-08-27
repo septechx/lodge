@@ -38,9 +38,9 @@ static const uint16_t INDICES[36] = {
 };
 
 static const RenderObject OBJECTS[3] = {
-    {{-3.0f, 0.0f, 0.0f}, {0.00f, LDG_PI / 4, 0.00f}, 1.0f},
-    {{0.0f, 0.0f, 0.0f}, {LDG_PI / 4, 0.00f, 0.00f}, 1.0f},
-    {{3.0f, 0.0f, 0.0f}, {0.00f, 0.00f, LDG_PI / 4}, 1.0f},
+    {{-3.0f, 0.0f, -5.0f}, Quat::fromEuler({0.00f, LDG_PI / 4, 0.00f}), 1.5f},
+    {{0.0f, 0.0f, 0.0f}, Quat::fromEuler({LDG_PI / 4, 0.00f, 0.00f}), 1.0f},
+    {{3.0f, 0.0f, 0.0f}, Quat::fromEuler({0.00f, 0.00f, LDG_PI / 4}), 0.5f},
 };
 
 static VkFormat findDepthFormat(VkPhysicalDevice physical) {

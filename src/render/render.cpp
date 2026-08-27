@@ -28,7 +28,7 @@ CmdBundle createCmd(VkDevice device, uint32_t queueFamily) {
 }
 
 static constexpr Mat4 objectModelMatrix(RenderObject object) {
-  return Mat4::translate(object.pos) * Mat4::rotEuler(object.euler) *
+  return Mat4::translate(object.pos) * Mat4::fromQuat(object.rotation) *
          Mat4::scale({object.scale, object.scale, object.scale});
 }
 

@@ -6,6 +6,8 @@
 #include <array>
 #include <cmath>
 
+struct Quat;
+
 // Helpful matrix diagram:
 // 0  1  2  3
 // 4  5  6  7
@@ -101,6 +103,8 @@ public:
   }
 
   static constexpr Mat4 rotEuler(Vec3 euler);
+
+  static constexpr Mat4 fromQuat(Quat q);
 
   constexpr float &operator()(std::size_t row, std::size_t col) {
     return m_data[col * 4 + row];
