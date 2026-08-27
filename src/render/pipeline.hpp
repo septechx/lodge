@@ -1,10 +1,11 @@
 #pragma once
 
+#include <vector>
+#include <vulkan/vulkan.h>
+
 #include "../asset/texture/load.hpp"
-#include "../consts.hpp"
 #include "../math/Mat4.hpp"
 #include "allocator.hpp"
-#include <vulkan/vulkan.h>
 
 AllocatedBuffer createVertexBuffer(VkDevice device, VkPhysicalDevice physical,
                                    const void *data, VkDeviceSize size);
@@ -38,10 +39,16 @@ DepthBuffer createDepthBuffer(VkDevice device, VkPhysicalDevice physical,
 struct SceneDescriptors {
   VkDescriptorSetLayout layout;
   VkDescriptorPool pool;
-  VkDescriptorSet sets[MAX_FRAMES_IN_FLIGHT];
+  std::vector<VkDescriptorSet> sets;
+  uint32_t textureCount = 0;
+
+  VkDescriptorSet get(uint32_t frame, uint32_t texIdx) const {
+    return sets[frame * textureCount + texIdx];
+  }
 };
 
-SceneDescriptors createSceneDescriptors(VkDevice device, Texture tex,
+SceneDescriptors createSceneDescriptors(VkDevice device,
+                                        const std::vector<Texture> &textures,
                                         CameraUniformBuffer *cameras);
 
 struct GraphicsPipeline {

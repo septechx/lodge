@@ -42,7 +42,7 @@ private:
   std::vector<DepthBuffer> m_depths;
   std::vector<RenderObject> m_renderObjects;
   bool m_swapchainDirty = false;
-  Texture m_tex;
+  std::vector<Texture> m_textures;
   CameraUniformBuffer m_cameraUniforms[MAX_FRAMES_IN_FLIGHT];
   SceneDescriptors m_desc;
   GraphicsPipeline m_gp;

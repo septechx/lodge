@@ -14,6 +14,6 @@ layout(location = 1) in vec2 uv;
 layout(location = 0) out vec2 fragUV;
 
 void main() {
-    fragUV = vec2(1.0f, 1.0f);
+    fragUV = uv;
     gl_Position = camera.viewproj * model.model * vec4(pos, 1.0);
 }

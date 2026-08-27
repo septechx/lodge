@@ -28,10 +28,12 @@ CmdBundle createCmd(VkDevice device, uint32_t queueFamily) {
 }
 
 void recordFrame(VkCommandBuffer cmd, VkPipeline pipeline,
-                 VkPipelineLayout layout, std::vector<RenderObject> objects,
-                 VkDescriptorSet texSet, VkImage image, VkImageView view,
-                 VkImage depthImage, VkImageView depthView,
-                 const VkExtent2D &extent, ImDrawData *drawData) {
+                 VkPipelineLayout layout,
+                 const std::vector<RenderObject> &objects,
+                 const SceneDescriptors &descriptors, uint32_t frameIndex,
+                 VkImage image, VkImageView view, VkImage depthImage,
+                 VkImageView depthView, const VkExtent2D &extent,
+                 ImDrawData *drawData) {
 
   VkCommandBufferBeginInfo begin = {
       .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO,
@@ -112,13 +114,17 @@ void recordFrame(VkCommandBuffer cmd, VkPipeline pipeline,
 
   vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline);
 
-  vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, layout, 0, 1,
-                          &texSet, 0, nullptr);
+  for (const RenderObject &object : objects) {
+    uint32_t texIdx = object.textureIndex;
+    if (texIdx >= descriptors.textureCount)
+      texIdx = 0;
+    VkDescriptorSet set = descriptors.get(frameIndex, texIdx);
+    vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, layout, 0, 1,
+                            &set, 0, nullptr);
 
-  for (RenderObject object : objects) {
     VkDeviceSize offset = 0;
     vkCmdBindVertexBuffers(cmd, 0, 1, &object.vbuf.buffer, &offset);
-    vkCmdBindIndexBuffer(cmd, object.ibuf.buffer, 0, VK_INDEX_TYPE_UINT16);
+    vkCmdBindIndexBuffer(cmd, object.ibuf.buffer, 0, object.indexType);
     vkCmdPushConstants(cmd, layout, VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(Mat4),
                        &object.worldMat);
     vkCmdDrawIndexed(cmd, object.indexCount, 1, 0, 0, 0);

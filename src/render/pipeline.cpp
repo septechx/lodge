@@ -108,8 +108,10 @@ DepthBuffer createDepthBuffer(VkDevice device, VkPhysicalDevice physical,
   return DepthBuffer{img.image, img.memory, view, format};
 }
 
-SceneDescriptors createSceneDescriptors(VkDevice device, Texture tex,
+SceneDescriptors createSceneDescriptors(VkDevice device,
+                                        const std::vector<Texture> &textures,
                                         CameraUniformBuffer *cameras) {
+  LDG_ASSERT(!textures.empty());
 
   VkDescriptorSetLayoutBinding bindings[2] = {
       {.binding = 0,
@@ -130,15 +132,17 @@ SceneDescriptors createSceneDescriptors(VkDevice device, Texture tex,
   CHECK_VK(vkCreateDescriptorSetLayout(device, &lci, nullptr, &setLayout),
            "create set layout");
 
+  uint32_t textureCount = static_cast<uint32_t>(textures.size());
+  uint32_t setCount = textureCount * MAX_FRAMES_IN_FLIGHT;
+
   VkDescriptorPoolSize poolSizes[2] = {
       {.type = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
-       .descriptorCount = MAX_FRAMES_IN_FLIGHT},
-      {.type = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,
-       .descriptorCount = MAX_FRAMES_IN_FLIGHT},
+       .descriptorCount = setCount},
+      {.type = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, .descriptorCount = setCount},
   };
   VkDescriptorPoolCreateInfo pci = {
       .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO,
-      .maxSets = MAX_FRAMES_IN_FLIGHT,
+      .maxSets = setCount,
       .poolSizeCount = 2,
       .pPoolSizes = poolSizes,
   };
@@ -146,47 +150,55 @@ SceneDescriptors createSceneDescriptors(VkDevice device, Texture tex,
   CHECK_VK(vkCreateDescriptorPool(device, &pci, nullptr, &pool),
            "create descriptor pool");
 
-  VkDescriptorSetLayout layouts[MAX_FRAMES_IN_FLIGHT] = {setLayout, setLayout};
+  std::vector<VkDescriptorSetLayout> layouts(setCount, setLayout);
   VkDescriptorSetAllocateInfo ai = {
       .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO,
       .descriptorPool = pool,
-      .descriptorSetCount = MAX_FRAMES_IN_FLIGHT,
-      .pSetLayouts = layouts,
+      .descriptorSetCount = setCount,
+      .pSetLayouts = layouts.data(),
   };
-  VkDescriptorSet sets[MAX_FRAMES_IN_FLIGHT];
-  CHECK_VK(vkAllocateDescriptorSets(device, &ai, sets), "alloc sets");
+  std::vector<VkDescriptorSet> sets(setCount);
+  CHECK_VK(vkAllocateDescriptorSets(device, &ai, sets.data()), "alloc sets");
 
-  for (int i = 0; i < MAX_FRAMES_IN_FLIGHT; ++i) {
-    VkDescriptorImageInfo imageInfo = {
-        .sampler = tex.sampler,
-        .imageView = tex.view,
-        .imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
-    };
-    VkDescriptorBufferInfo bufferInfo = {
-        .buffer = cameras[i].buffer,
-        .offset = 0,
-        .range = sizeof(CameraData),
-    };
-    VkWriteDescriptorSet writes[2] = {
-        {.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
-         .dstSet = sets[i],
-         .dstBinding = 0,
-         .dstArrayElement = 0,
-         .descriptorCount = 1,
-         .descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
-         .pImageInfo = &imageInfo},
-        {.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
-         .dstSet = sets[i],
-         .dstBinding = 1,
-         .dstArrayElement = 0,
-         .descriptorCount = 1,
-         .descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,
-         .pBufferInfo = &bufferInfo},
-    };
-    vkUpdateDescriptorSets(device, 2, writes, 0, nullptr);
+  for (uint32_t t = 0; t < textureCount; ++t) {
+    for (int f = 0; f < MAX_FRAMES_IN_FLIGHT; ++f) {
+      uint32_t idx = f * textureCount + t;
+      VkDescriptorImageInfo imageInfo = {
+          .sampler = textures[t].sampler,
+          .imageView = textures[t].view,
+          .imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
+      };
+      VkDescriptorBufferInfo bufferInfo = {
+          .buffer = cameras[f].buffer,
+          .offset = 0,
+          .range = sizeof(CameraData),
+      };
+      VkWriteDescriptorSet writes[2] = {
+          {.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
+           .dstSet = sets[idx],
+           .dstBinding = 0,
+           .dstArrayElement = 0,
+           .descriptorCount = 1,
+           .descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
+           .pImageInfo = &imageInfo},
+          {.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
+           .dstSet = sets[idx],
+           .dstBinding = 1,
+           .dstArrayElement = 0,
+           .descriptorCount = 1,
+           .descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,
+           .pBufferInfo = &bufferInfo},
+      };
+      vkUpdateDescriptorSets(device, 2, writes, 0, nullptr);
+    }
   }
 
-  return SceneDescriptors{setLayout, pool, {sets[0], sets[1]}};
+  return SceneDescriptors{
+      .layout = setLayout,
+      .pool = pool,
+      .sets = std::move(sets),
+      .textureCount = textureCount,
+  };
 }
 
 GraphicsPipeline createPipeline(VkDevice device, VkFormat colorFormat,
@@ -207,9 +219,7 @@ GraphicsPipeline createPipeline(VkDevice device, VkFormat colorFormat,
 
   VkVertexInputBindingDescription binding = {
       .binding = 0,
-      // TODO: Store Vertex in vertex buffer instead of Vec3
-      //.stride = sizeof(Vertex),
-      .stride = sizeof(Vec3),
+      .stride = sizeof(Vertex),
       .inputRate = VK_VERTEX_INPUT_RATE_VERTEX,
   };
   VkVertexInputAttributeDescription attrs[2] = {
@@ -229,7 +239,7 @@ GraphicsPipeline createPipeline(VkDevice device, VkFormat colorFormat,
       .sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO,
       .vertexBindingDescriptionCount = 1,
       .pVertexBindingDescriptions = &binding,
-      .vertexAttributeDescriptionCount = 1,
+      .vertexAttributeDescriptionCount = 2,
       .pVertexAttributeDescriptions = attrs,
   };
 

@@ -225,8 +225,8 @@ Swapchain createSwapchain(VkDevice device, VkPhysicalDevice physical,
     int w = 0;
     int h = 0;
     glfwGetFramebufferSize(&window, &w, &h);
-    extent.width = (uint32_t)w;
-    extent.height = (uint32_t)h;
+    extent.width = static_cast<uint32_t>(w);
+    extent.height = static_cast<uint32_t>(h);
   }
 
   uint32_t minCount = caps.minImageCount + 1;

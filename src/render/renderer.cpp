@@ -47,15 +47,15 @@ Renderer::Renderer(GLFWwindow &window) : m_window(window) {
     m_depths[i] = createDepthBuffer(m_dev.device, m_dev.physical, m_depthFormat,
                                     m_sc.extent.width, m_sc.extent.height);
 
-  m_renderObjects = loadModel(m_dev, "models/Box2.glb");
-
-  m_tex = loadTexture(m_dev, "textures/red_brick_diff_1k.png");
+  LoadedModel loaded = loadModel(m_dev, "models/Box2.glb");
+  m_renderObjects = std::move(loaded.objects);
+  m_textures = std::move(loaded.textures);
 
   for (int i = 0; i < MAX_FRAMES_IN_FLIGHT; ++i)
     m_cameraUniforms[i] =
         createCameraUniformBuffer(m_dev.device, m_dev.physical);
 
-  m_desc = createSceneDescriptors(m_dev.device, m_tex, m_cameraUniforms);
+  m_desc = createSceneDescriptors(m_dev.device, m_textures, m_cameraUniforms);
 
   m_gp = createPipeline(m_dev.device, m_sc.format, m_depthFormat, m_sc.extent,
                         m_desc.layout);
@@ -166,7 +166,7 @@ void Renderer::drawFrame() {
   }
 
   recordFrame(m_cmd[m_frame].cmd, m_gp.pipeline, m_gp.layout, m_renderObjects,
-              m_desc.sets[m_frame], m_sc.images[imageIndex],
+              m_desc, static_cast<uint32_t>(m_frame), m_sc.images[imageIndex],
               m_sc.views[imageIndex], m_depths[imageIndex].image,
               m_depths[imageIndex].view, m_sc.extent, drawData);
 
@@ -229,10 +229,12 @@ Renderer::~Renderer() {
     vkFreeMemory(device, obj.ibuf.memory, nullptr);
   }
 
-  vkDestroySampler(device, m_tex.sampler, nullptr);
-  vkDestroyImageView(device, m_tex.view, nullptr);
-  vkDestroyImage(device, m_tex.image, nullptr);
-  vkFreeMemory(device, m_tex.memory, nullptr);
+  for (Texture tex : m_textures) {
+    vkDestroySampler(device, tex.sampler, nullptr);
+    vkDestroyImageView(device, tex.view, nullptr);
+    vkDestroyImage(device, tex.image, nullptr);
+    vkFreeMemory(device, tex.memory, nullptr);
+  }
 
   for (int i = 0; i < MAX_FRAMES_IN_FLIGHT; ++i) {
     vkUnmapMemory(device, m_cameraUniforms[i].memory);

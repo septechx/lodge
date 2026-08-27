@@ -1,10 +1,11 @@
 #pragma once
 
-#include "imgui.h"
-#include "render_object.hpp"
+#include <vector>
 #include <vulkan/vulkan.h>
 
-#include <vector>
+#include "imgui.h"
+#include "pipeline.hpp"
+#include "render_object.hpp"
 
 struct CmdBundle {
   VkCommandPool pool;
@@ -14,7 +15,9 @@ struct CmdBundle {
 CmdBundle createCmd(VkDevice device, uint32_t queueFamily);
 
 void recordFrame(VkCommandBuffer cmd, VkPipeline pipeline,
-                 VkPipelineLayout layout, std::vector<RenderObject> objects,
-                 VkDescriptorSet texSet, VkImage image, VkImageView view,
-                 VkImage depthImage, VkImageView depthView,
-                 const VkExtent2D &extent, ImDrawData *drawData = nullptr);
+                 VkPipelineLayout layout,
+                 const std::vector<RenderObject> &objects,
+                 const SceneDescriptors &descriptors, uint32_t frameIndex,
+                 VkImage image, VkImageView view, VkImage depthImage,
+                 VkImageView depthView, const VkExtent2D &extent,
+                 ImDrawData *drawData = nullptr);
