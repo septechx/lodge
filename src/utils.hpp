@@ -12,16 +12,16 @@ readFileToString(const std::filesystem::path &path);
 template <typename T, typename Deleter> class Scoped {
 public:
   constexpr Scoped(T value, Deleter deleter = {})
-      : value(value), deleter(deleter) {}
+      : m_value(value), m_deleter(deleter) {}
 
   Scoped(const Scoped &) = delete;
   Scoped &operator=(const Scoped &) = delete;
 
-  ~Scoped() { deleter(value); }
+  ~Scoped() { m_deleter(m_value); }
 
-  constexpr T get() const { return value; }
+  constexpr T get() const { return m_value; }
 
 private:
-  T value;
-  Deleter deleter;
+  T m_value;
+  Deleter m_deleter;
 };

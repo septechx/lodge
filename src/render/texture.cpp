@@ -1,7 +1,7 @@
 #include "texture.hpp"
 
 #define STB_IMAGE_IMPLEMENTATION
-#include "../../thirdparty/stb_image.h"
+#include "stb_image.h"
 
 #include "allocator.hpp"
 #include "init.hpp"
@@ -142,15 +142,15 @@ static void uploadPixels(VkDevice device, VkQueue queue, uint32_t queueFamily,
   vkDestroyCommandPool(device, pool, nullptr);
 }
 
-Texture loadTexture(const Device &dev, const char *path) {
+Texture loadTexture(const Device &dev, std::filesystem::path path) {
   int w, h;
-  unsigned char *pixels = stbi_load(path, &w, &h, nullptr, 4);
+  unsigned char *pixels = stbi_load(path.c_str(), &w, &h, nullptr, 4);
   if (!pixels) {
-    std::println(stderr, "stb_image failed to load {}: {}", path,
+    std::println(stderr, "stb_image failed to load {}: {}", path.string(),
                  stbi_failure_reason());
     exit(1);
   }
-  std::println(stderr, "texture: {} ({}x{} RGBA)", path, w, h);
+  std::println(stderr, "texture: {} ({}x{} RGBA)", path.string(), w, h);
   VkDeviceSize texSize = static_cast<VkDeviceSize>(w * h * 4);
 
   AllocatedBuffer staging = createBuffer(

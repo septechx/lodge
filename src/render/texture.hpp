@@ -2,6 +2,8 @@
 
 #include <vulkan/vulkan.h>
 
+#include <filesystem>
+
 struct Device;
 
 struct Texture {
@@ -12,4 +14,4 @@ struct Texture {
   uint32_t width, height;
 };
 
-Texture loadTexture(const Device &dev, const char *path);
+Texture loadTexture(const Device &dev, std::filesystem::path path);
