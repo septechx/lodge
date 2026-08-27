@@ -1,6 +1,7 @@
 project(
   'lodge',
   'cpp',
+  'c',
   version: '0.1.0',
   default_options: [
     'cpp_std=c++23',
@@ -13,14 +14,15 @@ deps = [
   dependency('glfw3'),
 ]
 
-imgui_include = include_directories('thirdparty/imgui', 'thirdparty/imgui/backends')
-imgui_sources = files(
+include = include_directories('thirdparty', 'thirdparty/imgui', 'thirdparty/imgui/backends', 'thirdparty/tinygltf')
+deps_sources = files(
   'thirdparty/imgui/imgui.cpp',
   'thirdparty/imgui/imgui_draw.cpp',
   'thirdparty/imgui/imgui_tables.cpp',
   'thirdparty/imgui/imgui_widgets.cpp',
   'thirdparty/imgui/backends/imgui_impl_glfw.cpp',
   'thirdparty/imgui/backends/imgui_impl_vulkan.cpp',
+  'thirdparty/tinygltf/tiny_gltf_v3.c',
 )
 
 shaders = [
@@ -46,17 +48,19 @@ executable(
   'src/core/event.cpp',
   'src/core/layer_stack.cpp',
   'src/core/debug_layer.cpp',
+  'src/gltf/load.cpp',
   'src/render/allocator.cpp',
   'src/render/init.cpp',
   'src/render/pipeline.cpp',
   'src/render/texture.cpp',
   'src/render/renderer.cpp',
   'src/render/render.cpp',
-  imgui_sources,
+  deps_sources,
   sources: shader_deps,
   dependencies: deps,
-  include_directories: imgui_include,
+  include_directories: include,
   cpp_args: ['-Wno-missing-field-initializers'],
+  c_args: ['-DTINYGLTF3_ENABLE_FS']
 )
 
 catch2_dep = dependency('catch2-with-main', required: false)
@@ -69,7 +73,7 @@ if catch2_dep.found()
     'test_math',
     'tests/test_math.cpp',
     dependencies: catch2_dep,
-    include_directories: include_directories('src', 'thirdparty/imgui', 'thirdparty/imgui/backends'),
+    include_directories: include_directories('src'),
   )
   test('math', test_math)
 endif

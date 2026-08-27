@@ -1,10 +1,12 @@
 #pragma once
 
-#include "../math/Quat.hpp"
-#include "../math/Vec3.hpp"
+#include "../math/Mat4.hpp"
+#include "allocator.hpp"
 
 struct RenderObject {
-  Vec3 pos;
-  Quat rotation;
-  float scale;
+  Mat4 worldMat;
+  AllocatedBuffer vbuf;
+  AllocatedBuffer ibuf;
+  uint32_t indexCount;
+  VkIndexType indexType;
 };

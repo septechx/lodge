@@ -40,12 +40,11 @@ private:
   Swapchain m_sc;
   VkFormat m_depthFormat;
   std::vector<DepthBuffer> m_depths;
+  std::vector<RenderObject> m_renderObjects;
   bool m_swapchainDirty = false;
   Texture m_tex;
   CameraUniformBuffer m_cameraUniforms[MAX_FRAMES_IN_FLIGHT];
   SceneDescriptors m_desc;
-  AllocatedBuffer m_vb;
-  AllocatedBuffer m_ib;
   GraphicsPipeline m_gp;
   CmdBundle m_cmd[MAX_FRAMES_IN_FLIGHT];
   std::vector<VkSemaphore> m_submitSem;

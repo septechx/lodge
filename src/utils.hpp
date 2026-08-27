@@ -4,6 +4,15 @@
 #include <filesystem>
 #include <string>
 
+#define LDG_ASSERT(cond)                                                       \
+  do {                                                                         \
+    if (!(cond)) {                                                             \
+      std::println(stderr, "{}:{}: assertion failed: {}", __FILE__, __LINE__,  \
+                   #cond);                                                     \
+      exit(1);                                                                 \
+    }                                                                          \
+  } while (0)
+
 enum class ReadFileError { Error };
 
 std::expected<std::string, ReadFileError>

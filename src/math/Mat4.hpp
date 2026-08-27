@@ -115,6 +115,10 @@ public:
     return m_data[col * 4 + row];
   }
 
+  constexpr float &operator[](std::size_t i) { return m_data[i]; }
+
+  constexpr const float &operator[](std::size_t i) const { return m_data[i]; }
+
 private:
   float m_data[16]{};
 };

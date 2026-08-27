@@ -27,16 +27,10 @@ CmdBundle createCmd(VkDevice device, uint32_t queueFamily) {
   return CmdBundle{pool, cmd};
 }
 
-static constexpr Mat4 objectModelMatrix(RenderObject object) {
-  return Mat4::translate(object.pos) * Mat4::fromQuat(object.rotation) *
-         Mat4::scale({object.scale, object.scale, object.scale});
-}
-
 void recordFrame(VkCommandBuffer cmd, VkPipeline pipeline,
                  VkPipelineLayout layout, std::vector<RenderObject> objects,
-                 VkBuffer vertexBuffer, VkBuffer indexBuffer,
-                 uint32_t indexCount, VkDescriptorSet texSet, VkImage image,
-                 VkImageView view, VkImage depthImage, VkImageView depthView,
+                 VkDescriptorSet texSet, VkImage image, VkImageView view,
+                 VkImage depthImage, VkImageView depthView,
                  const VkExtent2D &extent, ImDrawData *drawData) {
 
   VkCommandBufferBeginInfo begin = {
@@ -121,15 +115,13 @@ void recordFrame(VkCommandBuffer cmd, VkPipeline pipeline,
   vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, layout, 0, 1,
                           &texSet, 0, nullptr);
 
-  VkDeviceSize offset = 0;
-  vkCmdBindVertexBuffers(cmd, 0, 1, &vertexBuffer, &offset);
-  vkCmdBindIndexBuffer(cmd, indexBuffer, 0, VK_INDEX_TYPE_UINT16);
-
   for (RenderObject object : objects) {
-    Mat4 modelMatrix = objectModelMatrix(object);
+    VkDeviceSize offset = 0;
+    vkCmdBindVertexBuffers(cmd, 0, 1, &object.vbuf.buffer, &offset);
+    vkCmdBindIndexBuffer(cmd, object.ibuf.buffer, 0, VK_INDEX_TYPE_UINT16);
     vkCmdPushConstants(cmd, layout, VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(Mat4),
-                       &modelMatrix);
-    vkCmdDrawIndexed(cmd, indexCount, 1, 0, 0, 0);
+                       &object.worldMat);
+    vkCmdDrawIndexed(cmd, object.indexCount, 1, 0, 0, 0);
   }
 
   vkCmdEndRendering(cmd);

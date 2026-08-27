@@ -1,47 +1,16 @@
 #include "renderer.hpp"
 
 #include "../consts.hpp"
+#include "../gltf/load.hpp"
 #include "imgui.h"
 #include "imgui_impl_vulkan.h"
 #include "render.hpp"
 #include "render_object.hpp"
 #include "utils.hpp"
-#include "vertex.hpp"
 
 #include <cstring>
 #include <ranges>
 #include <vector>
-
-static const Vertex VERTICES[24] = {
-    {-0.75f, -0.75f, +0.75f, 0.0f, 1.0f}, {+0.75f, -0.75f, +0.75f, 1.0f, 1.0f},
-    {-0.75f, +0.75f, +0.75f, 0.0f, 0.0f}, {+0.75f, +0.75f, +0.75f, 1.0f, 0.0f},
-
-    {+0.75f, -0.75f, -0.75f, 0.0f, 1.0f}, {-0.75f, -0.75f, -0.75f, 1.0f, 1.0f},
-    {+0.75f, +0.75f, -0.75f, 0.0f, 0.0f}, {-0.75f, +0.75f, -0.75f, 1.0f, 0.0f},
-
-    {+0.75f, -0.75f, +0.75f, 0.0f, 1.0f}, {+0.75f, -0.75f, -0.75f, 1.0f, 1.0f},
-    {+0.75f, +0.75f, +0.75f, 0.0f, 0.0f}, {+0.75f, +0.75f, -0.75f, 1.0f, 0.0f},
-
-    {-0.75f, -0.75f, -0.75f, 0.0f, 1.0f}, {-0.75f, -0.75f, +0.75f, 1.0f, 1.0f},
-    {-0.75f, +0.75f, -0.75f, 0.0f, 0.0f}, {-0.75f, +0.75f, +0.75f, 1.0f, 0.0f},
-
-    {-0.75f, +0.75f, +0.75f, 0.0f, 1.0f}, {+0.75f, +0.75f, +0.75f, 1.0f, 1.0f},
-    {-0.75f, +0.75f, -0.75f, 0.0f, 0.0f}, {+0.75f, +0.75f, -0.75f, 1.0f, 0.0f},
-
-    {-0.75f, -0.75f, -0.75f, 0.0f, 1.0f}, {+0.75f, -0.75f, -0.75f, 1.0f, 1.0f},
-    {-0.75f, -0.75f, +0.75f, 0.0f, 0.0f}, {+0.75f, -0.75f, +0.75f, 1.0f, 0.0f},
-};
-
-static const uint16_t INDICES[36] = {
-    0,  1,  2,  2,  1,  3,  4,  5,  6,  6,  5,  7,  8,  9,  10, 10, 9,  11,
-    12, 13, 14, 14, 13, 15, 16, 17, 18, 18, 17, 19, 20, 21, 22, 22, 21, 23,
-};
-
-static const RenderObject OBJECTS[3] = {
-    {{-3.0f, 0.0f, -5.0f}, Quat::fromEuler({0.00f, LDG_PI / 4, 0.00f}), 1.5f},
-    {{0.0f, 0.0f, 0.0f}, Quat::fromEuler({LDG_PI / 4, 0.00f, 0.00f}), 1.0f},
-    {{3.0f, 0.0f, 0.0f}, Quat::fromEuler({0.00f, 0.00f, LDG_PI / 4}), 0.5f},
-};
 
 static VkFormat findDepthFormat(VkPhysicalDevice physical) {
   static const VkFormat candidates[] = {
@@ -78,6 +47,8 @@ Renderer::Renderer(GLFWwindow &window) : m_window(window) {
     m_depths[i] = createDepthBuffer(m_dev.device, m_dev.physical, m_depthFormat,
                                     m_sc.extent.width, m_sc.extent.height);
 
+  m_renderObjects = loadModel(m_dev, "models/Box2.glb");
+
   m_tex = loadTexture(m_dev, "textures/red_brick_diff_1k.png");
 
   for (int i = 0; i < MAX_FRAMES_IN_FLIGHT; ++i)
@@ -85,11 +56,6 @@ Renderer::Renderer(GLFWwindow &window) : m_window(window) {
         createCameraUniformBuffer(m_dev.device, m_dev.physical);
 
   m_desc = createSceneDescriptors(m_dev.device, m_tex, m_cameraUniforms);
-
-  m_vb = createVertexBuffer(m_dev.device, m_dev.physical, VERTICES,
-                            sizeof(VERTICES));
-  m_ib =
-      createIndexBuffer(m_dev.device, m_dev.physical, INDICES, sizeof(INDICES));
 
   m_gp = createPipeline(m_dev.device, m_sc.format, m_depthFormat, m_sc.extent,
                         m_desc.layout);
@@ -199,9 +165,7 @@ void Renderer::drawFrame() {
     }
   }
 
-  std::vector<RenderObject> objects(std::begin(OBJECTS), std::end(OBJECTS));
-  recordFrame(m_cmd[m_frame].cmd, m_gp.pipeline, m_gp.layout, objects,
-              m_vb.buffer, m_ib.buffer, std::ranges::size(INDICES),
+  recordFrame(m_cmd[m_frame].cmd, m_gp.pipeline, m_gp.layout, m_renderObjects,
               m_desc.sets[m_frame], m_sc.images[imageIndex],
               m_sc.views[imageIndex], m_depths[imageIndex].image,
               m_depths[imageIndex].view, m_sc.extent, drawData);
@@ -257,11 +221,13 @@ Renderer::~Renderer() {
   vkDestroyPipeline(device, m_gp.pipeline, nullptr);
   vkDestroyPipelineLayout(device, m_gp.layout, nullptr);
 
-  vkDestroyBuffer(device, m_vb.buffer, nullptr);
-  vkFreeMemory(device, m_vb.memory, nullptr);
+  for (RenderObject obj : m_renderObjects) {
+    vkDestroyBuffer(device, obj.vbuf.buffer, nullptr);
+    vkFreeMemory(device, obj.vbuf.memory, nullptr);
 
-  vkDestroyBuffer(device, m_ib.buffer, nullptr);
-  vkFreeMemory(device, m_ib.memory, nullptr);
+    vkDestroyBuffer(device, obj.ibuf.buffer, nullptr);
+    vkFreeMemory(device, obj.ibuf.memory, nullptr);
+  }
 
   vkDestroySampler(device, m_tex.sampler, nullptr);
   vkDestroyImageView(device, m_tex.view, nullptr);

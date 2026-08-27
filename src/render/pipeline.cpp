@@ -4,7 +4,6 @@
 #include "../utils.hpp"
 #include "allocator.hpp"
 #include "utils.hpp"
-#include "vertex.hpp"
 
 #include <cstring>
 #include <print>
@@ -207,25 +206,21 @@ GraphicsPipeline createPipeline(VkDevice device, VkFormat colorFormat,
 
   VkVertexInputBindingDescription binding = {
       .binding = 0,
-      .stride = sizeof(Vertex),
+      .stride = sizeof(Vec3),
       .inputRate = VK_VERTEX_INPUT_RATE_VERTEX,
   };
-  VkVertexInputAttributeDescription attrs[2] = {
-      {.location = 0,
-       .binding = 0,
-       .format = VK_FORMAT_R32G32B32_SFLOAT,
-       .offset = offsetof(Vertex, x)},
-      {.location = 1,
-       .binding = 0,
-       .format = VK_FORMAT_R32G32_SFLOAT,
-       .offset = offsetof(Vertex, u)},
+  VkVertexInputAttributeDescription attr = {
+      .location = 0,
+      .binding = 0,
+      .format = VK_FORMAT_R32G32B32_SFLOAT,
+      .offset = offsetof(Vec3, x),
   };
   VkPipelineVertexInputStateCreateInfo vertexInput = {
       .sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO,
       .vertexBindingDescriptionCount = 1,
       .pVertexBindingDescriptions = &binding,
-      .vertexAttributeDescriptionCount = 2,
-      .pVertexAttributeDescriptions = attrs,
+      .vertexAttributeDescriptionCount = 1,
+      .pVertexAttributeDescriptions = &attr,
   };
 
   VkPipelineInputAssemblyStateCreateInfo assembly = {
