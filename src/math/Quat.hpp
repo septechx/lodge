@@ -63,9 +63,9 @@ constexpr Mat4 Mat4::fromQuat(Quat q) {
   float xy = nq.x * nq.y, xz = nq.x * nq.z, yz = nq.y * nq.z;
   float wx = nq.w * nq.x, wy = nq.w * nq.y, wz = nq.w * nq.z;
   return {
-      {1 - 2 * (yy + zz), 2 * (xy - wz), 2 * (xz + wy), 0},
-      {2 * (xy + wz), 1 - 2 * (xx + zz), 2 * (yz - wx), 0},
-      {2 * (xz - wy), 2 * (yz + wx), 1 - 2 * (xx + yy), 0},
+      {1 - 2 * (yy + zz), 2 * (xy + wz), 2 * (xz - wy), 0},
+      {2 * (xy - wz), 1 - 2 * (xx + zz), 2 * (yz + wx), 0},
+      {2 * (xz + wy), 2 * (yz - wx), 1 - 2 * (xx + yy), 0},
       {0, 0, 0, 1},
   };
 }
