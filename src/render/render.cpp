@@ -80,7 +80,7 @@ void recordFrame(VkCommandBuffer cmd, VkPipeline pipeline,
       .imageLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
       .loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR,
       .storeOp = VK_ATTACHMENT_STORE_OP_STORE,
-      .clearValue = {.color = {{0.0f, 0.0f, 0.0f, 1.0f}}},
+      .clearValue = {.color = {{0.19f, 0.19f, 0.19f, 1.0f}}},
   };
   VkRenderingAttachmentInfo depthAttachment = {
       .sType = VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO,
