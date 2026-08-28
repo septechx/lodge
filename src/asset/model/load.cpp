@@ -201,8 +201,8 @@ static std::vector<Texture> loadGltfTextures(const Device &dev,
 
     if (tex->source < 0 ||
         static_cast<uint32_t>(tex->source) >= model->images_count) {
-      spdlog::error("texture {} has invalid source {}, using white", ti,
-                    tex->source);
+      spdlog::warn("texture {} has invalid source {}, using white", ti,
+                   tex->source);
       textures.push_back(createWhiteTexture(dev));
       continue;
     }
