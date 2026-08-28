@@ -4,10 +4,10 @@
 #include "imgui.h"
 #include "imgui_impl_glfw.h"
 #include "imgui_impl_vulkan.h"
+#include <spdlog/spdlog.h>
 
 #include <algorithm>
 #include <cmath>
-#include <print>
 
 static float radians(float deg) { return deg * (LDG_PI / 180.0f); }
 static float degrees(float rad) { return rad * (180.0f / LDG_PI); }
@@ -36,7 +36,7 @@ void DebugLayer::onAttach() {
   ImGui::StyleColorsDark();
 
   if (!ImGui_ImplGlfw_InitForVulkan(&m_window, true)) {
-    std::println(stderr, "ImGui_ImplGlfw_InitForVulkan failed");
+    spdlog::error("ImGui_ImplGlfw_InitForVulkan failed");
     exit(1);
   }
 
@@ -62,12 +62,12 @@ void DebugLayer::onAttach() {
       .PipelineRenderingCreateInfo = pci,
   };
   if (!ImGui_ImplVulkan_Init(&initInfo)) {
-    std::println(stderr, "ImGui_ImplVulkan_Init failed");
+    spdlog::error("ImGui_ImplVulkan_Init failed");
     exit(1);
   }
 
   m_initialized = true;
-  std::println(stderr, "ImGui initialized");
+  spdlog::debug("ImGui initialized");
 }
 
 void DebugLayer::onDetach() {

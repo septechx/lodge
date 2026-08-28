@@ -7,9 +7,9 @@
 #include "../../render/init.hpp"
 #include "../../render/utils.hpp"
 #include "tiny_gltf_v3.h"
+#include <spdlog/spdlog.h>
 
 #include <cstring>
-#include <print>
 
 static Texture createTexture(VkDevice device, VkPhysicalDevice physical,
                              int width, int height, VkSampler sampler) {
@@ -210,11 +210,11 @@ Texture loadTexture(const Device &dev, std::filesystem::path path) {
   int w, h;
   unsigned char *pixels = stbi_load(path.c_str(), &w, &h, nullptr, 4);
   if (!pixels) {
-    std::println(stderr, "stb_image failed to load {}: {}", path.string(),
-                 stbi_failure_reason());
+    spdlog::error("stb_image failed to load {}: {}", path.string(),
+                  stbi_failure_reason());
     exit(1);
   }
-  std::println(stderr, "texture: {} ({}x{} RGBA)", path.string(), w, h);
+  spdlog::debug("texture: {} ({}x{} RGBA)", path.string(), w, h);
   VkDeviceSize texSize = static_cast<VkDeviceSize>(w * h * 4);
 
   AllocatedBuffer staging = createBuffer(
@@ -266,12 +266,10 @@ Texture createTextureFromMemory(const Device &dev, const uint8_t *data,
   unsigned char *pixels =
       stbi_load_from_memory(data, static_cast<int>(size), &w, &h, nullptr, 4);
   if (!pixels) {
-    std::println(stderr, "stb_image failed from memory: {}",
-                 stbi_failure_reason());
+    spdlog::error("stb_image failed from memory: {}", stbi_failure_reason());
     exit(1);
   }
-  std::println(stderr, "texture from memory ({}x{} RGBA, {} bytes)", w, h,
-               size);
+  spdlog::debug("texture from memory ({}x{} RGBA, {} bytes)", w, h, size);
   VkDeviceSize texSize = static_cast<VkDeviceSize>(w * h * 4);
 
   AllocatedBuffer staging = createBuffer(

@@ -7,11 +7,11 @@
 #include "../../render/vertex.hpp"
 #include "../../utils.hpp"
 #include "tiny_gltf_v3.h"
+#include <spdlog/spdlog.h>
 
 #include <cstdint>
 #include <cstdlib>
 #include <cstring>
-#include <print>
 #include <string_view>
 #include <utility>
 #include <vector>
@@ -201,8 +201,8 @@ static std::vector<Texture> loadGltfTextures(const Device &dev,
 
     if (tex->source < 0 ||
         static_cast<uint32_t>(tex->source) >= model->images_count) {
-      std::println(stderr, "texture {} has invalid source {}, using white", ti,
-                   tex->source);
+      spdlog::error("texture {} has invalid source {}, using white", ti,
+                    tex->source);
       textures.push_back(createWhiteTexture(dev));
       continue;
     }
@@ -217,13 +217,11 @@ static std::vector<Texture> loadGltfTextures(const Device &dev,
       size_t size = bv->byte_length;
 
       Texture t = createTextureFromMemory(dev, data, size, sampler);
-      std::println(stderr,
-                   "loaded glTF texture {} from image {} ({} bytes) -> {}x{}",
-                   ti, tex->source, size, t.width, t.height);
+      spdlog::debug("loaded glTF texture {} from image {} ({} bytes) -> {}x{}",
+                    ti, tex->source, size, t.width, t.height);
       textures.push_back(t);
     } else {
-      std::println(stderr,
-                   "texture {} image {} has no buffer view, using white", ti,
+      spdlog::warn("texture {} image {} has no buffer view, using white", ti,
                    tex->source);
       textures.push_back(createWhiteTexture(dev));
     }
@@ -265,7 +263,7 @@ buildObjects(const Device &dev, const tinygltf3::Model &model,
       for (uint32_t pi = 0; pi < mesh->primitives_count; ++pi) {
         const tg3_primitive *prim = &mesh->primitives[pi];
         if (prim->indices < 0) {
-          std::println(stderr, "skipping non-indexed primitive");
+          spdlog::warn("skipping non-indexed primitive");
           continue;
         }
 
@@ -297,8 +295,8 @@ buildObjects(const Device &dev, const tinygltf3::Model &model,
         else if (idxAcc->component_type == TG3_COMPONENT_TYPE_UNSIGNED_INT)
           idxType = VK_INDEX_TYPE_UINT32;
         else {
-          std::println(stderr, "unsupported index component {}",
-                       idxAcc->component_type);
+          spdlog::error("unsupported index component {}",
+                        idxAcc->component_type);
           exit(1);
         }
 
@@ -322,14 +320,12 @@ buildObjects(const Device &dev, const tinygltf3::Model &model,
           if (texIdx >= 0 && static_cast<uint32_t>(texIdx) < textures.size()) {
             texIndex = static_cast<uint32_t>(texIdx);
           } else if (texIdx >= 0) {
-            std::println(stderr,
-                         "material {} baseColorTexture {} out of range, using "
+            spdlog::warn("material {} baseColorTexture {} out of range, using "
                          "fallback {} ",
                          prim->material, texIdx, fallbackTex);
           }
         } else if (prim->material >= 0) {
-          std::println(stderr, "primitive material {} out of range",
-                       prim->material);
+          spdlog::warn("primitive material {} out of range", prim->material);
         }
 
         RenderObject obj{
@@ -362,15 +358,13 @@ LoadedModel loadModel(const Device &dev, std::filesystem::path path) {
 
   tg3_error_code err = tinygltf3::parse_file(model, errors, path.c_str());
   if (err != TG3_OK) {
-    std::println(stderr, "parse {} failed: {}", path.string(),
-                 static_cast<int>(err));
+    spdlog::error("parse {} failed: {}", path.string(), static_cast<int>(err));
     for (uint32_t i = 0; i < errors.count(); ++i)
-      std::println(stderr, "[{}] {}", severity(errors.entry(i)->severity),
-                   errors.entry(i)->message);
+      spdlog::error("[{}] {}", severity(errors.entry(i)->severity),
+                    errors.entry(i)->message);
     exit(1);
   }
-  std::println(
-      stderr,
+  spdlog::debug(
       "{}: {} scenes {} nodes {} meshes {} textures {} images {} materials",
       path.string(), model->scenes_count, model->nodes_count,
       model->meshes_count, model->textures_count, model->images_count,
@@ -380,7 +374,7 @@ LoadedModel loadModel(const Device &dev, std::filesystem::path path) {
 
   uint32_t fallbackTex = 0;
   if (textures.empty()) {
-    std::println(stderr, "no glTF textures found, creating white fallback");
+    spdlog::warn("no glTF textures found, creating white fallback");
     Texture white = createWhiteTexture(dev);
     textures.push_back(white);
     fallbackTex = 0;
@@ -404,8 +398,7 @@ LoadedModel loadModel(const Device &dev, std::filesystem::path path) {
       Texture white = createWhiteTexture(dev);
       fallbackTex = static_cast<uint32_t>(textures.size());
       textures.push_back(white);
-      std::println(stderr, "added white fallback texture at index {}",
-                   fallbackTex);
+      spdlog::warn("added white fallback texture at index {}", fallbackTex);
     } else {
       fallbackTex = 0;
     }
@@ -413,8 +406,8 @@ LoadedModel loadModel(const Device &dev, std::filesystem::path path) {
 
   std::vector<RenderObject> objects =
       buildObjects(dev, model, textures, fallbackTex);
-  std::println(stderr, "built {} objects with {} textures from glTF",
-               objects.size(), textures.size());
+  spdlog::debug("built {} objects with {} textures from glTF", objects.size(),
+                textures.size());
 
   return {std::move(objects), std::move(textures)};
 }

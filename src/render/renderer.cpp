@@ -7,6 +7,7 @@
 #include "render.hpp"
 #include "render_object.hpp"
 #include "utils.hpp"
+#include <spdlog/spdlog.h>
 
 #include <cstring>
 #include <ranges>
@@ -26,7 +27,7 @@ static VkFormat findDepthFormat(VkPhysicalDevice physical) {
            VK_FORMAT_FEATURE_DEPTH_STENCIL_ATTACHMENT_BIT;
   });
   if (it == std::ranges::end(candidates)) {
-    std::println(stderr, "no supported depth format found");
+    spdlog::error("no supported depth format found");
     exit(1);
   }
   return *it;

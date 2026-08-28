@@ -3,11 +3,11 @@
 #include "../consts.hpp"
 #include "utils.hpp"
 #include <GLFW/glfw3.h>
+#include <spdlog/spdlog.h>
 
 #include <algorithm>
 #include <cstdint>
 #include <cstring>
-#include <print>
 #include <ranges>
 
 const char *VK_VALIDATION_LAYER = "VK_LAYER_KHRONOS_validation";
@@ -22,9 +22,9 @@ debugCallback(VkDebugUtilsMessageSeverityFlagBitsEXT severity,
   (void)type;
   (void)user;
   if (severity >= VK_DEBUG_UTILS_MESSAGE_SEVERITY_ERROR_BIT_EXT)
-    std::println(stderr, "  [VK ERROR] {}", data->pMessage);
+    spdlog::error("  [VK ERROR] {}", data->pMessage);
   else
-    std::println(stderr, "  [VK]       {}", data->pMessage);
+    spdlog::debug("  [VK]       {}", data->pMessage);
   return VK_FALSE;
 }
 
@@ -55,7 +55,7 @@ VkInstance createInstance() {
   uint32_t glfwExtCount = 0;
   const char **glfwExts = glfwGetRequiredInstanceExtensions(&glfwExtCount);
   if (!glfwExts) {
-    std::println(stderr, "GLFW found no Vulkan surface extensions");
+    spdlog::error("GLFW found no Vulkan surface extensions");
     exit(1);
   }
 
@@ -66,10 +66,9 @@ VkInstance createInstance() {
   uint32_t layerCount = 0;
   if (instanceHasLayer(VK_VALIDATION_LAYER)) {
     layerCount = 1;
-    std::println(stderr, "validation layer: ON");
+    spdlog::debug("validation layer: ON");
   } else {
-    std::println(stderr,
-                 "warning: {} not installed; running without validation",
+    spdlog::warn("{} not installed; running without validation",
                  VK_VALIDATION_LAYER);
   }
 
@@ -142,13 +141,13 @@ Device createDevice(VkInstance instance, VkSurfaceKHR surface) {
     }
   }
   if (!chosen) {
-    std::println(stderr, "no GPU with a graphics+present queue found");
+    spdlog::error("no GPU with a graphics+present queue found");
     exit(1);
   }
 
   VkPhysicalDeviceProperties props;
   vkGetPhysicalDeviceProperties(chosen, &props);
-  std::println(stderr, "GPU: {}", props.deviceName);
+  spdlog::debug("GPU: {}", props.deviceName);
 
   float priority = 1.0f;
   VkDeviceQueueCreateInfo queueInfo = {

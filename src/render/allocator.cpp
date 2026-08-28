@@ -1,6 +1,7 @@
 #include "allocator.hpp"
 
 #include "utils.hpp"
+#include <spdlog/spdlog.h>
 
 static uint32_t findMemoryType(VkPhysicalDevice physical, uint32_t typeBits,
                                VkMemoryPropertyFlags props) {
@@ -10,7 +11,7 @@ static uint32_t findMemoryType(VkPhysicalDevice physical, uint32_t typeBits,
     if ((typeBits & (1u << i)) &&
         (mp.memoryTypes[i].propertyFlags & props) == props)
       return i;
-  std::println(stderr, "no suitable memory type");
+  spdlog::error("no suitable memory type");
   exit(1);
 }
 

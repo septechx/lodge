@@ -7,7 +7,6 @@
 #include "vertex.hpp"
 
 #include <cstring>
-#include <print>
 #include <vulkan/vulkan_core.h>
 
 struct ShaderModules {
@@ -26,7 +25,7 @@ static ShaderModules loadShaders(VkDevice device) {
     CHECK_VK(vkCreateShaderModule(device, &vci, nullptr, &modules.vert),
              "create VS module");
   } else {
-    std::println("Failed to read vertex shader");
+    spdlog::error("Failed to read vertex shader");
     exit(1);
   }
 
@@ -39,7 +38,7 @@ static ShaderModules loadShaders(VkDevice device) {
     CHECK_VK(vkCreateShaderModule(device, &fci, nullptr, &modules.frag),
              "create FS module");
   } else {
-    std::println("Failed to read fragment shader");
+    spdlog::error("Failed to read fragment shader");
     exit(1);
   }
 

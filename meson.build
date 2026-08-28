@@ -12,6 +12,7 @@ project(
 deps = [
   dependency('vulkan'),
   dependency('glfw3'),
+  dependency('spdlog'),
 ]
 
 include = include_directories('thirdparty', 'thirdparty/imgui', 'thirdparty/imgui/backends', 'thirdparty/tinygltf')

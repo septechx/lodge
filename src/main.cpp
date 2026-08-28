@@ -9,7 +9,7 @@
 
 #include <chrono>
 #include <cstring>
-#include <print>
+#include <spdlog/spdlog.h>
 #include <variant>
 
 class ControlLayer final : public Layer {
@@ -50,9 +50,13 @@ private:
 int main(int argc, char **argv) {
   bool enableDebug = argc >= 2 && strcmp(argv[1], "--debug") == 0;
 
+  if (enableDebug) {
+    spdlog::set_level(spdlog::level::trace);
+  }
+
   int init_result = glfwInit();
   if (init_result == 0) {
-    std::println(stderr, "glfw init failed");
+    spdlog::error("glfw init failed");
     return 1;
   }
 
@@ -64,7 +68,7 @@ int main(int argc, char **argv) {
                glfwTerminate();
              });
   if (!window.get()) {
-    std::println(stderr, "glfw window failed");
+    spdlog::error("glfw window failed");
     return 1;
   }
 
