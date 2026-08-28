@@ -6,6 +6,7 @@
 #include "imgui_impl_vulkan.h"
 #include "render.hpp"
 #include "render_object.hpp"
+#include "src/render/pipeline.hpp"
 #include "utils.hpp"
 #include <spdlog/spdlog.h>
 
@@ -48,15 +49,24 @@ Renderer::Renderer(GLFWwindow &window) : m_window(window) {
     m_depths[i] = createDepthBuffer(m_dev.device, m_dev.physical, m_depthFormat,
                                     m_sc.extent.width, m_sc.extent.height);
 
-  LoadedModel loaded = loadModel(m_dev, "models/Box2.glb");
+  LoadedModel loaded = loadModel(m_dev, "models/car3.glb");
   m_renderObjects = std::move(loaded.objects);
   m_textures = std::move(loaded.textures);
+
+  uint8_t yellow[4] = {255, 230, 64, 255};
+  Texture lightTex = createTextureFromPixels(m_dev, 1, 1, yellow);
+  m_textures.push_back(lightTex);
+  m_light.createGizmo(m_dev, m_textures.size() - 1);
 
   for (int i = 0; i < MAX_FRAMES_IN_FLIGHT; ++i)
     m_cameraUniforms[i] =
         createCameraUniformBuffer(m_dev.device, m_dev.physical);
 
-  m_desc = createSceneDescriptors(m_dev.device, m_textures, m_cameraUniforms);
+  for (int i = 0; i < MAX_FRAMES_IN_FLIGHT; ++i)
+    m_lights[i] = createLightUniformBuffer(m_dev.device, m_dev.physical);
+
+  m_desc = createSceneDescriptors(m_dev.device, m_textures, m_cameraUniforms,
+                                  m_lights);
 
   m_gp = createPipeline(m_dev.device, m_sc.format, m_depthFormat, m_sc.extent,
                         m_desc.layout);
@@ -154,8 +164,13 @@ void Renderer::drawFrame() {
 
   float aspect = static_cast<float>(m_sc.extent.width) /
                  static_cast<float>(m_sc.extent.height);
-  CameraData cameraData = {m_camera.getViewProj(aspect)};
+  CameraData cameraData{m_camera.getViewProj(aspect)};
   memcpy(m_cameraUniforms[m_frame].mapped, &cameraData, sizeof(CameraData));
+
+  LightData lightData{.lightPos = m_light.pos,
+                      .lightColor = Vec3{1.0f, 1.0f, 1.0f},
+                      .viewPos = m_camera.eye};
+  memcpy(m_lights[m_frame].mapped, &lightData, sizeof(LightData));
 
   ImDrawData *drawData = nullptr;
   if (ImGui::GetCurrentContext() != nullptr) {
@@ -166,7 +181,16 @@ void Renderer::drawFrame() {
     }
   }
 
-  recordFrame(m_cmd[m_frame].cmd, m_gp.pipeline, m_gp.layout, m_renderObjects,
+  std::vector<RenderObject> frameObjects = m_renderObjects;
+  if (m_light.showGizmo && m_light.hasGizmo) {
+    Mat4 t = Mat4::translate(m_light.pos);
+    Mat4 s = Mat4::scale(
+        Vec3{m_light.gizmoSize, m_light.gizmoSize, m_light.gizmoSize});
+    m_light.gizmo.worldMat = t * s;
+    frameObjects.push_back(m_light.gizmo);
+  }
+
+  recordFrame(m_cmd[m_frame].cmd, m_gp.pipeline, m_gp.layout, frameObjects,
               m_desc, static_cast<uint32_t>(m_frame), m_sc.images[imageIndex],
               m_sc.views[imageIndex], m_depths[imageIndex].image,
               m_depths[imageIndex].view, m_sc.extent, drawData);
@@ -208,6 +232,8 @@ Renderer::~Renderer() {
   const VkDevice device = m_dev.device;
   CHECK_VK(vkDeviceWaitIdle(device), "device idle");
 
+  m_light.destroyGizmo(m_dev);
+
   for (int i = 0; i < MAX_FRAMES_IN_FLIGHT; ++i) {
     vkDestroyCommandPool(device, m_cmd[i].pool, nullptr);
     vkDestroySemaphore(device, m_acquireSem[i], nullptr);
@@ -241,6 +267,12 @@ Renderer::~Renderer() {
     vkUnmapMemory(device, m_cameraUniforms[i].memory);
     vkDestroyBuffer(device, m_cameraUniforms[i].buffer, nullptr);
     vkFreeMemory(device, m_cameraUniforms[i].memory, nullptr);
+  }
+
+  for (int i = 0; i < MAX_FRAMES_IN_FLIGHT; ++i) {
+    vkUnmapMemory(device, m_lights[i].memory);
+    vkDestroyBuffer(device, m_lights[i].buffer, nullptr);
+    vkFreeMemory(device, m_lights[i].memory, nullptr);
   }
 
   destroySwapchainResources();

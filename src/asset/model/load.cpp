@@ -9,6 +9,7 @@
 #include "tiny_gltf_v3.h"
 #include <spdlog/spdlog.h>
 
+#include <algorithm>
 #include <cstdint>
 #include <cstdlib>
 #include <cstring>
@@ -117,8 +118,8 @@ static uint8_t *accessorBytes(const tinygltf3::Model &model, int32_t accIndex,
   return base;
 }
 
-static int32_t findAttribute(const tg3_primitive *prim, std::string_view name,
-                             size_t nameLen) {
+static int32_t findAttribute(const tg3_primitive *prim, std::string_view name) {
+  size_t nameLen = name.size();
   for (uint32_t ai = 0; ai < prim->attributes_count; ++ai) {
     const tg3_str_int_pair *kv = &prim->attributes[ai];
     if (kv->key.len == nameLen &&
@@ -184,6 +185,72 @@ static Vec3 readPosition(const tinygltf3::Model &model, int32_t accIndex,
       base + static_cast<size_t>(vertexIdx) * static_cast<size_t>(stride);
   const float *f = reinterpret_cast<const float *>(elem);
   return {f[0], f[1], f[2]};
+}
+
+static Vec3 readNormal(const tinygltf3::Model &model, int32_t accIndex,
+                       uint32_t vertexIdx) {
+  if (accIndex < 0)
+    return {0.0f, 0.0f, 1.0f};
+  const tg3_accessor *acc = &model->accessors[accIndex];
+  const tg3_buffer_view *bv = &model->buffer_views[acc->buffer_view];
+  const tg3_buffer *buf = &model->buffers[bv->buffer];
+  int32_t stride = tg3_accessor_byte_stride(acc, bv);
+  if (stride <= 0)
+    stride = static_cast<int32_t>(sizeComp(acc->component_type) *
+                                  numComp(acc->type));
+  const uint8_t *base = buf->data.data + bv->byte_offset + acc->byte_offset;
+  const uint8_t *elem =
+      base + static_cast<size_t>(vertexIdx) * static_cast<size_t>(stride);
+
+  if (acc->component_type == TG3_COMPONENT_TYPE_FLOAT &&
+      acc->type == TG3_TYPE_VEC3) {
+    const float *f = reinterpret_cast<const float *>(elem);
+    return {f[0], f[1], f[2]};
+  }
+  if (acc->component_type == TG3_COMPONENT_TYPE_BYTE &&
+      acc->type == TG3_TYPE_VEC3) {
+    const int8_t *b = reinterpret_cast<const int8_t *>(elem);
+    if (acc->normalized) {
+      return {std::max(b[0] / 127.0f, -1.0f), std::max(b[1] / 127.0f, -1.0f),
+              std::max(b[2] / 127.0f, -1.0f)};
+    } else {
+      return {static_cast<float>(b[0]), static_cast<float>(b[1]),
+              static_cast<float>(b[2])};
+    }
+  }
+  if (acc->component_type == TG3_COMPONENT_TYPE_UNSIGNED_BYTE &&
+      acc->type == TG3_TYPE_VEC3) {
+    const uint8_t *u = elem;
+    if (acc->normalized) {
+      return {u[0] / 255.0f, u[1] / 255.0f, u[2] / 255.0f};
+    } else {
+      return {static_cast<float>(u[0]), static_cast<float>(u[1]),
+              static_cast<float>(u[2])};
+    }
+  }
+  if (acc->component_type == TG3_COMPONENT_TYPE_SHORT &&
+      acc->type == TG3_TYPE_VEC3) {
+    const int16_t *s = reinterpret_cast<const int16_t *>(elem);
+    if (acc->normalized) {
+      return {std::max(s[0] / 32767.0f, -1.0f),
+              std::max(s[1] / 32767.0f, -1.0f),
+              std::max(s[2] / 32767.0f, -1.0f)};
+    } else {
+      return {static_cast<float>(s[0]), static_cast<float>(s[1]),
+              static_cast<float>(s[2])};
+    }
+  }
+  if (acc->component_type == TG3_COMPONENT_TYPE_UNSIGNED_SHORT &&
+      acc->type == TG3_TYPE_VEC3) {
+    const uint16_t *u = reinterpret_cast<const uint16_t *>(elem);
+    if (acc->normalized) {
+      return {u[0] / 65535.0f, u[1] / 65535.0f, u[2] / 65535.0f};
+    } else {
+      return {static_cast<float>(u[0]), static_cast<float>(u[1]),
+              static_cast<float>(u[2])};
+    }
+  }
+  return {0.0f, 0.0f, 1.0f};
 }
 
 static std::vector<Texture> loadGltfTextures(const Device &dev,
@@ -267,8 +334,9 @@ buildObjects(const Device &dev, const tinygltf3::Model &model,
           continue;
         }
 
-        int posIdx = findAttribute(prim, "POSITION", 8);
-        int uvIdx = findAttribute(prim, "TEXCOORD_0", 10);
+        int posIdx = findAttribute(prim, "POSITION");
+        int uvIdx = findAttribute(prim, "TEXCOORD_0");
+        int normalIdx = findAttribute(prim, "NORMAL");
         LDG_ASSERT(posIdx >= 0);
         const tg3_accessor *posAcc = &model->accessors[posIdx];
         LDG_ASSERT(posAcc->type == TG3_TYPE_VEC3 &&
@@ -283,7 +351,8 @@ buildObjects(const Device &dev, const tinygltf3::Model &model,
           if (uvIdx >= 0) {
             uv = readTexcoord(model, uvIdx, vi);
           }
-          vertices.push_back(Vertex{pos, uv});
+          Vec3 normal = readNormal(model, normalIdx, vi);
+          vertices.push_back(Vertex{pos, uv, normal});
         }
 
         size_t idxBytes;

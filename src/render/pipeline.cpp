@@ -6,6 +6,7 @@
 #include "utils.hpp"
 #include "vertex.hpp"
 
+#include <cstddef>
 #include <cstring>
 #include <vulkan/vulkan_core.h>
 
@@ -88,6 +89,19 @@ CameraUniformBuffer createCameraUniformBuffer(VkDevice device,
                              static_cast<CameraData *>(mapped)};
 }
 
+LightUniformBuffer createLightUniformBuffer(VkDevice device,
+                                            VkPhysicalDevice physical) {
+  AllocatedBuffer buf = createBuffer(device, physical, sizeof(LightData),
+                                     VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT,
+                                     VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT |
+                                         VK_MEMORY_PROPERTY_HOST_COHERENT_BIT);
+  void *mapped = nullptr;
+  CHECK_VK(vkMapMemory(device, buf.memory, 0, sizeof(LightData), 0, &mapped),
+           "map light uniform");
+  return LightUniformBuffer{buf.buffer, buf.memory,
+                            static_cast<LightData *>(mapped)};
+}
+
 DepthBuffer createDepthBuffer(VkDevice device, VkPhysicalDevice physical,
                               VkFormat format, uint32_t width,
                               uint32_t height) {
@@ -109,12 +123,17 @@ DepthBuffer createDepthBuffer(VkDevice device, VkPhysicalDevice physical,
 
 SceneDescriptors createSceneDescriptors(VkDevice device,
                                         const std::vector<Texture> &textures,
-                                        CameraUniformBuffer *cameras) {
+                                        CameraUniformBuffer *cameras,
+                                        LightUniformBuffer *lights) {
   LDG_ASSERT(!textures.empty());
 
-  VkDescriptorSetLayoutBinding bindings[2] = {
+  VkDescriptorSetLayoutBinding bindings[3] = {
       {.binding = 0,
        .descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
+       .descriptorCount = 1,
+       .stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT},
+      {.binding = 2,
+       .descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,
        .descriptorCount = 1,
        .stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT},
       {.binding = 1,
@@ -124,7 +143,7 @@ SceneDescriptors createSceneDescriptors(VkDevice device,
   };
   VkDescriptorSetLayoutCreateInfo lci = {
       .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO,
-      .bindingCount = 2,
+      .bindingCount = 3,
       .pBindings = bindings,
   };
   VkDescriptorSetLayout setLayout;
@@ -134,15 +153,16 @@ SceneDescriptors createSceneDescriptors(VkDevice device,
   uint32_t textureCount = static_cast<uint32_t>(textures.size());
   uint32_t setCount = textureCount * MAX_FRAMES_IN_FLIGHT;
 
-  VkDescriptorPoolSize poolSizes[2] = {
+  VkDescriptorPoolSize poolSizes[3] = {
       {.type = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
        .descriptorCount = setCount},
+      {.type = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, .descriptorCount = setCount},
       {.type = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, .descriptorCount = setCount},
   };
   VkDescriptorPoolCreateInfo pci = {
       .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO,
       .maxSets = setCount,
-      .poolSizeCount = 2,
+      .poolSizeCount = 3,
       .pPoolSizes = poolSizes,
   };
   VkDescriptorPool pool;
@@ -167,12 +187,17 @@ SceneDescriptors createSceneDescriptors(VkDevice device,
           .imageView = textures[t].view,
           .imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
       };
-      VkDescriptorBufferInfo bufferInfo = {
+      VkDescriptorBufferInfo lightInfo = {
+          .buffer = lights[f].buffer,
+          .offset = 0,
+          .range = sizeof(LightData),
+      };
+      VkDescriptorBufferInfo cameraInfo = {
           .buffer = cameras[f].buffer,
           .offset = 0,
           .range = sizeof(CameraData),
       };
-      VkWriteDescriptorSet writes[2] = {
+      VkWriteDescriptorSet writes[3] = {
           {.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
            .dstSet = sets[idx],
            .dstBinding = 0,
@@ -182,13 +207,20 @@ SceneDescriptors createSceneDescriptors(VkDevice device,
            .pImageInfo = &imageInfo},
           {.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
            .dstSet = sets[idx],
+           .dstBinding = 2,
+           .dstArrayElement = 0,
+           .descriptorCount = 1,
+           .descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,
+           .pBufferInfo = &lightInfo},
+          {.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
+           .dstSet = sets[idx],
            .dstBinding = 1,
            .dstArrayElement = 0,
            .descriptorCount = 1,
            .descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,
-           .pBufferInfo = &bufferInfo},
+           .pBufferInfo = &cameraInfo},
       };
-      vkUpdateDescriptorSets(device, 2, writes, 0, nullptr);
+      vkUpdateDescriptorSets(device, 3, writes, 0, nullptr);
     }
   }
 
@@ -221,7 +253,7 @@ GraphicsPipeline createPipeline(VkDevice device, VkFormat colorFormat,
       .stride = sizeof(Vertex),
       .inputRate = VK_VERTEX_INPUT_RATE_VERTEX,
   };
-  VkVertexInputAttributeDescription attrs[2] = {
+  VkVertexInputAttributeDescription attrs[3] = {
       {
           .location = 0,
           .binding = 0,
@@ -233,12 +265,18 @@ GraphicsPipeline createPipeline(VkDevice device, VkFormat colorFormat,
           .binding = 0,
           .format = VK_FORMAT_R32G32_SFLOAT,
           .offset = offsetof(Vertex, texture),
+      },
+      {
+          .location = 2,
+          .binding = 0,
+          .format = VK_FORMAT_R32G32B32_SFLOAT,
+          .offset = offsetof(Vertex, normal),
       }};
   VkPipelineVertexInputStateCreateInfo vertexInput = {
       .sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO,
       .vertexBindingDescriptionCount = 1,
       .pVertexBindingDescriptions = &binding,
-      .vertexAttributeDescriptionCount = 2,
+      .vertexAttributeDescriptionCount = 3,
       .pVertexAttributeDescriptions = attrs,
   };
 

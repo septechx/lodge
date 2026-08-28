@@ -6,6 +6,7 @@
 #include "../asset/texture/load.hpp"
 #include "camera.hpp"
 #include "init.hpp"
+#include "light.hpp"
 #include "pipeline.hpp"
 #include "render.hpp"
 
@@ -21,6 +22,10 @@ public:
   Camera &getCamera() { return m_camera; }
   const Camera &getCamera() const { return m_camera; }
   void setCamera(const Camera &cam) { m_camera = cam; }
+
+  Light &getLight() { return m_light; }
+  const Light &getLight() const { return m_light; }
+  void setLight(const Light &light) { m_light = light; }
 
   VkInstance getInstance() const { return m_instance; }
   Device &getDevice() { return m_dev; }
@@ -44,6 +49,7 @@ private:
   bool m_swapchainDirty = false;
   std::vector<Texture> m_textures;
   CameraUniformBuffer m_cameraUniforms[MAX_FRAMES_IN_FLIGHT];
+  LightUniformBuffer m_lights[MAX_FRAMES_IN_FLIGHT];
   SceneDescriptors m_desc;
   GraphicsPipeline m_gp;
   CmdBundle m_cmd[MAX_FRAMES_IN_FLIGHT];
@@ -52,4 +58,5 @@ private:
   VkFence m_frameFence[MAX_FRAMES_IN_FLIGHT];
   int m_frame = 0;
   Camera m_camera;
+  Light m_light;
 };

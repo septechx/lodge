@@ -26,6 +26,24 @@ struct CameraUniformBuffer {
 CameraUniformBuffer createCameraUniformBuffer(VkDevice device,
                                               VkPhysicalDevice physical);
 
+struct LightData {
+  Vec3 lightPos;
+  float _pad0;
+  Vec3 lightColor;
+  float _pad1;
+  Vec3 viewPos;
+  float _pad2;
+};
+
+struct LightUniformBuffer {
+  VkBuffer buffer;
+  VkDeviceMemory memory;
+  LightData *mapped;
+};
+
+LightUniformBuffer createLightUniformBuffer(VkDevice device,
+                                            VkPhysicalDevice physical);
+
 struct DepthBuffer {
   VkImage image;
   VkDeviceMemory memory;
@@ -49,7 +67,8 @@ struct SceneDescriptors {
 
 SceneDescriptors createSceneDescriptors(VkDevice device,
                                         const std::vector<Texture> &textures,
-                                        CameraUniformBuffer *cameras);
+                                        CameraUniformBuffer *cameras,
+                                        LightUniformBuffer *lights);
 
 struct GraphicsPipeline {
   VkPipeline pipeline;
