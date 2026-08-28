@@ -132,14 +132,14 @@ SceneDescriptors createSceneDescriptors(VkDevice device,
        .descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
        .descriptorCount = 1,
        .stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT},
-      {.binding = 2,
-       .descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,
-       .descriptorCount = 1,
-       .stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT},
       {.binding = 1,
        .descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,
        .descriptorCount = 1,
        .stageFlags = VK_SHADER_STAGE_VERTEX_BIT},
+      {.binding = 2,
+       .descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,
+       .descriptorCount = 1,
+       .stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT},
   };
   VkDescriptorSetLayoutCreateInfo lci = {
       .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO,
@@ -153,16 +153,16 @@ SceneDescriptors createSceneDescriptors(VkDevice device,
   uint32_t textureCount = static_cast<uint32_t>(textures.size());
   uint32_t setCount = textureCount * MAX_FRAMES_IN_FLIGHT;
 
-  VkDescriptorPoolSize poolSizes[3] = {
+  VkDescriptorPoolSize poolSizes[2] = {
       {.type = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
        .descriptorCount = setCount},
-      {.type = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, .descriptorCount = setCount},
-      {.type = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, .descriptorCount = setCount},
+      {.type = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,
+       .descriptorCount = setCount * 2},
   };
   VkDescriptorPoolCreateInfo pci = {
       .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO,
       .maxSets = setCount,
-      .poolSizeCount = 3,
+      .poolSizeCount = 2,
       .pPoolSizes = poolSizes,
   };
   VkDescriptorPool pool;
@@ -207,18 +207,18 @@ SceneDescriptors createSceneDescriptors(VkDevice device,
            .pImageInfo = &imageInfo},
           {.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
            .dstSet = sets[idx],
-           .dstBinding = 2,
-           .dstArrayElement = 0,
-           .descriptorCount = 1,
-           .descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,
-           .pBufferInfo = &lightInfo},
-          {.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
-           .dstSet = sets[idx],
            .dstBinding = 1,
            .dstArrayElement = 0,
            .descriptorCount = 1,
            .descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,
            .pBufferInfo = &cameraInfo},
+          {.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
+           .dstSet = sets[idx],
+           .dstBinding = 2,
+           .dstArrayElement = 0,
+           .descriptorCount = 1,
+           .descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,
+           .pBufferInfo = &lightInfo},
       };
       vkUpdateDescriptorSets(device, 3, writes, 0, nullptr);
     }
@@ -350,7 +350,7 @@ GraphicsPipeline createPipeline(VkDevice device, VkFormat colorFormat,
   VkPushConstantRange pushRange = {
       .stageFlags = VK_SHADER_STAGE_VERTEX_BIT,
       .offset = 0,
-      .size = sizeof(Mat4),
+      .size = sizeof(PushConstants),
   };
   VkPipelineLayoutCreateInfo layoutInfo = {
       .sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO,

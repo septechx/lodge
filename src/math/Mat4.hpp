@@ -1,5 +1,6 @@
 #pragma once
 
+#include "Mat3.hpp"
 #include "Vec3.hpp"
 #include "math.hpp"
 
@@ -118,6 +119,18 @@ public:
   constexpr float &operator[](std::size_t i) { return m_data[i]; }
 
   constexpr const float &operator[](std::size_t i) const { return m_data[i]; }
+
+  constexpr Mat3 upper3x3() const {
+    return Mat3{
+        {(*this)(0, 0), (*this)(1, 0), (*this)(2, 0)},
+        {(*this)(0, 1), (*this)(1, 1), (*this)(2, 1)},
+        {(*this)(0, 2), (*this)(1, 2), (*this)(2, 2)},
+    };
+  }
+
+  constexpr Mat3 normalMatrix() const {
+    return upper3x3().inverse().transpose();
+  }
 
 private:
   float m_data[16]{};

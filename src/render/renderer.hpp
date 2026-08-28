@@ -21,11 +21,9 @@ public:
 
   Camera &getCamera() { return m_camera; }
   const Camera &getCamera() const { return m_camera; }
-  void setCamera(const Camera &cam) { m_camera = cam; }
 
   Light &getLight() { return m_light; }
   const Light &getLight() const { return m_light; }
-  void setLight(const Light &light) { m_light = light; }
 
   VkInstance getInstance() const { return m_instance; }
   Device &getDevice() { return m_dev; }

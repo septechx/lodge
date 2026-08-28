@@ -240,20 +240,20 @@ void DebugLayer::buildUI(float dt) {
   }
 
   if (ImGui::CollapsingHeader("Lighting", ImGuiTreeNodeFlags_DefaultOpen)) {
-    Light light = m_renderer.getLight();
+    Light &light = m_renderer.getLight();
     float lp[3] = {light.pos.x, light.pos.y, light.pos.z};
     if (ImGui::DragFloat3("Light Pos", lp, 0.1f)) {
-      m_renderer.getLight().pos = Vec3{lp[0], lp[1], lp[2]};
+      light.pos = Vec3{lp[0], lp[1], lp[2]};
     }
 
     bool show = light.showGizmo;
     if (ImGui::Checkbox("Show Light Gizmo", &show)) {
-      m_renderer.getLight().showGizmo = show;
+      light.showGizmo = show;
     }
     if (show) {
       float sz = light.gizmoSize;
       if (ImGui::SliderFloat("Gizmo Size", &sz, 0.05f, 1.0f)) {
-        m_renderer.getLight().gizmoSize = sz;
+        light.gizmoSize = sz;
       }
     }
   }

@@ -189,8 +189,10 @@ static Vec3 readPosition(const tinygltf3::Model &model, int32_t accIndex,
 
 static Vec3 readNormal(const tinygltf3::Model &model, int32_t accIndex,
                        uint32_t vertexIdx) {
-  if (accIndex < 0)
+  if (accIndex < 0) {
+    spdlog::warn("mesh primitive missing NORMAL attribute, using fallback");
     return {0.0f, 0.0f, 1.0f};
+  }
   const tg3_accessor *acc = &model->accessors[accIndex];
   const tg3_buffer_view *bv = &model->buffer_views[acc->buffer_view];
   const tg3_buffer *buf = &model->buffers[bv->buffer];
@@ -222,7 +224,7 @@ static Vec3 readNormal(const tinygltf3::Model &model, int32_t accIndex,
       acc->type == TG3_TYPE_VEC3) {
     const uint8_t *u = elem;
     if (acc->normalized) {
-      return {u[0] / 255.0f, u[1] / 255.0f, u[2] / 255.0f};
+      return {u[0] / 127.5f - 1.0f, u[1] / 127.5f - 1.0f, u[2] / 127.5f - 1.0f};
     } else {
       return {static_cast<float>(u[0]), static_cast<float>(u[1]),
               static_cast<float>(u[2])};
@@ -244,12 +246,16 @@ static Vec3 readNormal(const tinygltf3::Model &model, int32_t accIndex,
       acc->type == TG3_TYPE_VEC3) {
     const uint16_t *u = reinterpret_cast<const uint16_t *>(elem);
     if (acc->normalized) {
-      return {u[0] / 65535.0f, u[1] / 65535.0f, u[2] / 65535.0f};
+      return {u[0] / 32767.5f - 1.0f, u[1] / 32767.5f - 1.0f,
+              u[2] / 32767.5f - 1.0f};
     } else {
       return {static_cast<float>(u[0]), static_cast<float>(u[1]),
               static_cast<float>(u[2])};
     }
   }
+  spdlog::warn("unsupported NORMAL accessor encoding (componentType={} "
+               "type={}), using fallback",
+               acc->component_type, acc->type);
   return {0.0f, 0.0f, 1.0f};
 }
 

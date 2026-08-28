@@ -15,6 +15,11 @@ struct Light {
   RenderObject gizmo{};
   bool hasGizmo = false;
 
+  Light() = default;
+
+  Light(const Light &) = delete;
+  Light &operator=(const Light &) = delete;
+
   void createGizmo(const Device &dev, size_t textureCount) {
     std::vector<Vertex> verts;
     verts.reserve(24);

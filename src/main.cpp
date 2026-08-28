@@ -3,7 +3,6 @@
 #include "core/event.hpp"
 #include "core/layer.hpp"
 #include "core/layer_stack.hpp"
-#include "render/renderer.hpp"
 #include "utils.hpp"
 #include <GLFW/glfw3.h>
 

@@ -4,6 +4,7 @@
 #include <vulkan/vulkan.h>
 
 #include "../asset/texture/load.hpp"
+#include "../math/Mat3.hpp"
 #include "../math/Mat4.hpp"
 #include "allocator.hpp"
 
@@ -34,6 +35,25 @@ struct LightData {
   Vec3 viewPos;
   float _pad2;
 };
+
+struct PushConstants {
+  Mat4 model;
+  Mat4 normal;
+};
+
+constexpr Mat4 mat4FromNormalMat3(const Mat3 &n) {
+  Mat4 r = Mat4::IDENTITY;
+  r(0, 0) = n(0, 0);
+  r(1, 0) = n(1, 0);
+  r(2, 0) = n(2, 0);
+  r(0, 1) = n(0, 1);
+  r(1, 1) = n(1, 1);
+  r(2, 1) = n(2, 1);
+  r(0, 2) = n(0, 2);
+  r(1, 2) = n(1, 2);
+  r(2, 2) = n(2, 2);
+  return r;
+}
 
 struct LightUniformBuffer {
   VkBuffer buffer;

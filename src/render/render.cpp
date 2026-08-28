@@ -125,8 +125,12 @@ void recordFrame(VkCommandBuffer cmd, VkPipeline pipeline,
     VkDeviceSize offset = 0;
     vkCmdBindVertexBuffers(cmd, 0, 1, &object.vbuf.buffer, &offset);
     vkCmdBindIndexBuffer(cmd, object.ibuf.buffer, 0, object.indexType);
-    vkCmdPushConstants(cmd, layout, VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(Mat4),
-                       &object.worldMat);
+    PushConstants pc{
+        .model = object.worldMat,
+        .normal = mat4FromNormalMat3(object.worldMat.normalMatrix()),
+    };
+    vkCmdPushConstants(cmd, layout, VK_SHADER_STAGE_VERTEX_BIT, 0,
+                       sizeof(PushConstants), &pc);
     vkCmdDrawIndexed(cmd, object.indexCount, 1, 0, 0, 0);
   }
 

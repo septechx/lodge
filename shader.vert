@@ -2,6 +2,7 @@
 
 layout(push_constant) uniform ModelMatrix {
     mat4 model;
+    mat4 normal;
 } model;
 layout(binding = 1) uniform CameraData {
     mat4 viewproj;
@@ -18,8 +19,8 @@ layout(location = 2) out vec3 fragPos;
 void main() {
     fragUV = inUv;
 
-    mat3 normalMat = mat3(model.model);
-    fragNormal = normalize(normalMat * inNormal);
+    mat3 normal = mat3(model.normal);
+    fragNormal = normalize(normal * inNormal);
 
     fragPos = vec3(model.model * vec4(inPos, 1.0));
 
