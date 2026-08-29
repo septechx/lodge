@@ -112,6 +112,7 @@ GraphicsPipeline createTransparentPipeline(VkDevice device,
   };
   VkPipelineColorBlendStateCreateInfo colorBlend = {
       .sType = VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_STATE_CREATE_INFO,
+      .logicOpEnable = VK_FALSE,
       .attachmentCount = 1,
       .pAttachments = &blendAttach,
   };
