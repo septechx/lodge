@@ -12,9 +12,11 @@
 #include <tiny_gltf_v3.h>
 
 #include <algorithm>
+#include <cctype>
 #include <cstdint>
 #include <cstdlib>
 #include <cstring>
+#include <string>
 #include <string_view>
 #include <utility>
 #include <vector>
@@ -389,8 +391,6 @@ buildObjects(const Device &dev, const tinygltf3::Model &model,
             static_cast<uint32_t>(prim->material) < model->materials_count) {
           const tg3_material *mat = &model->materials[prim->material];
 
-          isBlend = strncmp(mat->alpha_mode.data, "BLEND", 5) == 0;
-
           doubleSided = mat->double_sided != 0;
 
           for (int c = 0; c < 4; ++c)
@@ -405,6 +405,12 @@ buildObjects(const Device &dev, const tinygltf3::Model &model,
                          "fallback {} ",
                          prim->material, texIdx, fallbackTex);
           }
+
+          bool alphaModeBlend = mat->alpha_mode.data != nullptr &&
+                                strncmp(mat->alpha_mode.data, "BLEND", 5) == 0;
+          bool baseColorTranslucent = baseColorFactor[3] < 0.999f;
+
+          isBlend = alphaModeBlend || baseColorTranslucent;
         } else if (prim->material >= 0) {
           spdlog::warn("primitive material {} out of range", prim->material);
         }

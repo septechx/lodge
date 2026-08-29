@@ -11,8 +11,8 @@ GraphicsPipeline createTransparentPipeline(VkDevice device,
                                            VkFormat depthFormat,
                                            const VkExtent2D &extent,
                                            VkDescriptorSetLayout setLayout) {
-  ShaderModules modules =
-      loadShaders(device, "build/opaque.vert.spv", "build/opaque.frag.spv");
+  ShaderModules modules = loadShaders(device, "build/transparent.vert.spv",
+                                      "build/transparent.frag.spv");
 
   VkPipelineShaderStageCreateInfo stages[2] = {
       {.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO,
@@ -82,7 +82,7 @@ GraphicsPipeline createTransparentPipeline(VkDevice device,
   VkPipelineRasterizationStateCreateInfo raster = {
       .sType = VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_CREATE_INFO,
       .polygonMode = VK_POLYGON_MODE_FILL,
-      .cullMode = VK_CULL_MODE_BACK_BIT,
+      .cullMode = VK_CULL_MODE_NONE,
       .lineWidth = 1.0f,
   };
   VkPipelineMultisampleStateCreateInfo multisample = {

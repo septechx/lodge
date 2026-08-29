@@ -1,7 +1,6 @@
 #include "render.hpp"
 
 #include "src/math/Mat4.hpp"
-#include "src/math/Vec4.hpp"
 #include "src/render/pipelines/pipeline.hpp"
 #include "src/render/utils.hpp"
 
@@ -158,7 +157,8 @@ void recordFrame(VkCommandBuffer cmd, GraphicsPipelines pipelines,
       texIdx = 0;
     VkDescriptorSet set = descriptors.get(frameIndex, texIdx);
     vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS,
-                            pipelines.opaque.layout, 0, 1, &set, 0, nullptr);
+                            pipelines.transparent.layout, 0, 1, &set, 0,
+                            nullptr);
 
     VkDeviceSize offset = 0;
     vkCmdBindVertexBuffers(cmd, 0, 1, &object.vbuf.buffer, &offset);
@@ -171,8 +171,9 @@ void recordFrame(VkCommandBuffer cmd, GraphicsPipelines pipelines,
         .normal2 = {normal[6], normal[7], normal[8], 0},
         .baseColor = object.material.baseColorFactor,
     };
-    vkCmdPushConstants(cmd, pipelines.opaque.layout, VK_SHADER_STAGE_VERTEX_BIT,
-                       0, sizeof(PushConstants), &pc);
+    vkCmdPushConstants(cmd, pipelines.transparent.layout,
+                       VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(PushConstants),
+                       &pc);
     vkCmdDrawIndexed(cmd, object.indexCount, 1, 0, 0, 0);
   }
 

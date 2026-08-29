@@ -29,6 +29,8 @@ deps_sources = files(
 shaders = [
   ['shaders/opaque.vert', 'opaque.vert.spv'],
   ['shaders/opaque.frag', 'opaque.frag.spv'],
+  ['shaders/transparent.vert', 'transparent.vert.spv'],
+  ['shaders/transparent.frag', 'transparent.frag.spv'],
 ]
 
 shader_deps = []
