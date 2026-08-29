@@ -1,13 +1,14 @@
 #include "load.hpp"
 
-#include "../../math/Quat.hpp"
-#include "../../math/Vec2.hpp"
-#include "../../render/allocator.hpp"
-#include "../../render/buffers.hpp"
-#include "../../render/vertex.hpp"
-#include "../../utils.hpp"
-#include "tiny_gltf_v3.h"
+#include "src/math/Quat.hpp"
+#include "src/math/Vec2.hpp"
+#include "src/render/allocator.hpp"
+#include "src/render/buffers.hpp"
+#include "src/render/vertex.hpp"
+#include "src/utils.hpp"
+
 #include <spdlog/spdlog.h>
+#include <tiny_gltf_v3.h>
 
 #include <algorithm>
 #include <cstdint>

@@ -1,6 +1,7 @@
 #pragma once
 
-#include "device.hpp"
+#include "src/render/device.hpp"
+
 #include <vulkan/vulkan.h>
 
 struct AllocatedBuffer {

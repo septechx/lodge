@@ -1,8 +1,8 @@
 #pragma once
 
-#include "../consts.hpp"
-#include "../math/Mat4.hpp"
-#include "../math/Vec3.hpp"
+#include "src/consts.hpp"
+#include "src/math/Mat4.hpp"
+#include "src/math/Vec3.hpp"
 
 struct Camera {
   Vec3 eye{0.0f, 1.0f, 1.0f};

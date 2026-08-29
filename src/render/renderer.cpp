@@ -1,14 +1,15 @@
 #include "renderer.hpp"
 
-#include "../asset/model/load.hpp"
-#include "../consts.hpp"
-#include "imgui.h"
-#include "imgui_impl_vulkan.h"
-#include "init.hpp"
-#include "pipeline.hpp"
-#include "render.hpp"
-#include "render_object.hpp"
-#include "utils.hpp"
+#include "src/asset/model/load.hpp"
+#include "src/consts.hpp"
+#include "src/render/init.hpp"
+#include "src/render/pipeline.hpp"
+#include "src/render/render.hpp"
+#include "src/render/render_object.hpp"
+#include "src/render/utils.hpp"
+
+#include <imgui.h>
+#include <imgui_impl_vulkan.h>
 #include <spdlog/spdlog.h>
 
 #include <cstring>

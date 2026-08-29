@@ -1,8 +1,8 @@
 #pragma once
 
-#include "../math/Mat4.hpp"
-#include "../math/Vec4.hpp"
-#include "allocator.hpp"
+#include "src/math/Mat4.hpp"
+#include "src/math/Vec4.hpp"
+#include "src/render/allocator.hpp"
 
 struct RenderObject {
   Mat4 worldMat;

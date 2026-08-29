@@ -1,8 +1,9 @@
 #include "render.hpp"
 
-#include "../math/Mat4.hpp"
-#include "imgui_impl_vulkan.h"
-#include "utils.hpp"
+#include "src/math/Mat4.hpp"
+#include "src/render/utils.hpp"
+
+#include <imgui_impl_vulkan.h>
 #include <vulkan/vulkan_core.h>
 
 static constexpr Mat4 mat4FromNormalMat3(const Mat3 &n) {

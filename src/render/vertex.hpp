@@ -1,7 +1,7 @@
 #pragma once
 
-#include "../math/Vec2.hpp"
-#include "../math/Vec3.hpp"
+#include "src/math/Vec2.hpp"
+#include "src/math/Vec3.hpp"
 
 struct Vertex {
   Vec3 position;

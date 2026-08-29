@@ -1,9 +1,9 @@
 #include "pipeline.hpp"
 
-#include "../utils.hpp"
-#include "buffers.hpp"
-#include "utils.hpp"
-#include "vertex.hpp"
+#include "src/render/buffers.hpp"
+#include "src/render/utils.hpp"
+#include "src/render/vertex.hpp"
+#include "src/utils.hpp"
 
 #include <cstddef>
 

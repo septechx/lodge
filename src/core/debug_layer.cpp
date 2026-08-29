@@ -1,9 +1,10 @@
 #include "debug_layer.hpp"
 
-#include "../render/camera.hpp"
-#include "imgui.h"
-#include "imgui_impl_glfw.h"
-#include "imgui_impl_vulkan.h"
+#include "src/render/camera.hpp"
+
+#include <imgui.h>
+#include <imgui_impl_glfw.h>
+#include <imgui_impl_vulkan.h>
 #include <spdlog/spdlog.h>
 
 #include <algorithm>

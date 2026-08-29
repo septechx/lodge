@@ -1,10 +1,10 @@
 #pragma once
 
-#include "../math/Vec3.hpp"
-#include "buffers.hpp"
-#include "device.hpp"
-#include "render_object.hpp"
-#include "vertex.hpp"
+#include "src/math/Vec3.hpp"
+#include "src/render/buffers.hpp"
+#include "src/render/device.hpp"
+#include "src/render/render_object.hpp"
+#include "src/render/vertex.hpp"
 
 #include <vector>
 

@@ -1,6 +1,6 @@
 #include "device.hpp"
 
-#include "utils.hpp"
+#include "src/render/utils.hpp"
 
 Device createDevice(VkInstance instance, VkSurfaceKHR surface) {
   uint32_t count = 0;

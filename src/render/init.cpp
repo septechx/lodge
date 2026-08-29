@@ -1,7 +1,8 @@
 #include "init.hpp"
 
-#include "../consts.hpp"
-#include "utils.hpp"
+#include "src/consts.hpp"
+#include "src/render/utils.hpp"
+
 #include <GLFW/glfw3.h>
 #include <spdlog/spdlog.h>
 

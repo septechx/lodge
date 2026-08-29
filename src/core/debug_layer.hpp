@@ -1,7 +1,8 @@
 #pragma once
 
-#include "../render/renderer.hpp"
-#include "layer.hpp"
+#include "src/core/layer.hpp"
+#include "src/render/renderer.hpp"
+
 #include <GLFW/glfw3.h>
 
 class DebugLayer final : public Layer {

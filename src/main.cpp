@@ -1,9 +1,10 @@
-#include "consts.hpp"
-#include "core/debug_layer.hpp"
-#include "core/event.hpp"
-#include "core/layer.hpp"
-#include "core/layer_stack.hpp"
-#include "utils.hpp"
+#include "src/consts.hpp"
+#include "src/core/debug_layer.hpp"
+#include "src/core/event.hpp"
+#include "src/core/layer.hpp"
+#include "src/core/layer_stack.hpp"
+#include "src/utils.hpp"
+
 #include <GLFW/glfw3.h>
 
 #include <chrono>

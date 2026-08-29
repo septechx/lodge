@@ -1,7 +1,7 @@
 #pragma once
 
-#include "Mat4.hpp"
-#include "Vec3.hpp"
+#include "src/math/Mat4.hpp"
+#include "src/math/Vec3.hpp"
 
 #include <cmath>
 

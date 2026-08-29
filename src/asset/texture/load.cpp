@@ -1,12 +1,13 @@
 #include "load.hpp"
 
-#define STB_IMAGE_IMPLEMENTATION
-#include "stb_image.h"
+#include "src/render/allocator.hpp"
+#include "src/render/utils.hpp"
 
-#include "../../render/allocator.hpp"
-#include "../../render/utils.hpp"
-#include "tiny_gltf_v3.h"
+#define STB_IMAGE_IMPLEMENTATION
+#include <stb_image.h>
+
 #include <spdlog/spdlog.h>
+#include <tiny_gltf_v3.h>
 
 #include <cstring>
 

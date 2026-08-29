@@ -1,14 +1,14 @@
 #pragma once
 
+#include "src/asset/texture/load.hpp"
+#include "src/render/camera.hpp"
+#include "src/render/light.hpp"
+#include "src/render/pipeline.hpp"
+#include "src/render/render.hpp"
+#include "src/render/swapchain.hpp"
+
 #define GLFW_INCLUDE_VULKAN
 #include <GLFW/glfw3.h>
-
-#include "../asset/texture/load.hpp"
-#include "camera.hpp"
-#include "light.hpp"
-#include "pipeline.hpp"
-#include "render.hpp"
-#include "swapchain.hpp"
 
 #include <vector>
 

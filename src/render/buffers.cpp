@@ -1,8 +1,8 @@
 #include "buffers.hpp"
 
-#include "../consts.hpp"
-#include "../utils.hpp"
-#include "utils.hpp"
+#include "src/consts.hpp"
+#include "src/render/utils.hpp"
+#include "src/utils.hpp"
 
 AllocatedBuffer createVertexBuffer(Device device, const void *data,
                                    VkDeviceSize size) {

@@ -1,8 +1,8 @@
 #pragma once
 
-#include "../asset/texture/load.hpp"
-#include "../math/Mat4.hpp"
-#include "allocator.hpp"
+#include "src/asset/texture/load.hpp"
+#include "src/math/Mat4.hpp"
+#include "src/render/allocator.hpp"
 
 #include <vector>
 

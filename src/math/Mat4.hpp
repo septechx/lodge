@@ -1,8 +1,8 @@
 #pragma once
 
-#include "Mat3.hpp"
-#include "Vec3.hpp"
-#include "math.hpp"
+#include "src/math/Mat3.hpp"
+#include "src/math/Vec3.hpp"
+#include "src/math/math.hpp"
 
 #include <array>
 #include <cmath>
