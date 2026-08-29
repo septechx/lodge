@@ -3,7 +3,7 @@
 #include "src/asset/texture/load.hpp"
 #include "src/render/camera.hpp"
 #include "src/render/light.hpp"
-#include "src/render/pipeline.hpp"
+#include "src/render/pipelines/pipeline.hpp"
 #include "src/render/render.hpp"
 #include "src/render/swapchain.hpp"
 
@@ -49,7 +49,7 @@ private:
   CameraUniformBuffer m_cameraUniforms[MAX_FRAMES_IN_FLIGHT];
   LightUniformBuffer m_lights[MAX_FRAMES_IN_FLIGHT];
   SceneDescriptors m_desc;
-  GraphicsPipeline m_gp;
+  GraphicsPipeline m_opaquePipeline;
   CmdBundle m_cmd[MAX_FRAMES_IN_FLIGHT];
   std::vector<VkSemaphore> m_submitSem;
   VkSemaphore m_acquireSem[MAX_FRAMES_IN_FLIGHT];

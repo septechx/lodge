@@ -1,51 +1,15 @@
-#include "pipeline.hpp"
+#include "opaque.hpp"
 
 #include "src/render/buffers.hpp"
 #include "src/render/utils.hpp"
 #include "src/render/vertex.hpp"
-#include "src/utils.hpp"
 
 #include <cstddef>
 
-struct ShaderModules {
-  VkShaderModule vert, frag;
-};
-
-static ShaderModules loadShaders(VkDevice device) {
-  ShaderModules modules;
-
-  if (auto spir = readFileToString("build/shader.vert.spv"); spir.has_value()) {
-    VkShaderModuleCreateInfo vci = {
-        .sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO,
-        .codeSize = spir->size(),
-        .pCode = reinterpret_cast<const uint32_t *>(spir->data()),
-    };
-    CHECK_VK(vkCreateShaderModule(device, &vci, nullptr, &modules.vert),
-             "create VS module");
-  } else {
-    spdlog::error("Failed to read vertex shader");
-    exit(1);
-  }
-
-  if (auto spir = readFileToString("build/shader.frag.spv"); spir.has_value()) {
-    VkShaderModuleCreateInfo fci = {
-        .sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO,
-        .codeSize = spir->size(),
-        .pCode = reinterpret_cast<const uint32_t *>(spir->data()),
-    };
-    CHECK_VK(vkCreateShaderModule(device, &fci, nullptr, &modules.frag),
-             "create FS module");
-  } else {
-    spdlog::error("Failed to read fragment shader");
-    exit(1);
-  }
-
-  return modules;
-}
-
-GraphicsPipeline createPipeline(VkDevice device, VkFormat colorFormat,
-                                VkFormat depthFormat, const VkExtent2D &extent,
-                                VkDescriptorSetLayout setLayout) {
+GraphicsPipeline createOpaquePipeline(VkDevice device, VkFormat colorFormat,
+                                      VkFormat depthFormat,
+                                      const VkExtent2D &extent,
+                                      VkDescriptorSetLayout setLayout) {
   ShaderModules modules = loadShaders(device);
 
   VkPipelineShaderStageCreateInfo stages[2] = {
