@@ -191,8 +191,12 @@ void Renderer::drawFrame() {
     frameObjects.push_back(m_light.gizmo);
   }
 
-  recordFrame(m_cmd[m_frame].cmd, m_opaquePipeline.pipeline,
-              m_opaquePipeline.layout, frameObjects, m_desc,
+  auto opaque = frameObjects | std::views::filter([](const auto &obj) {
+                  return obj.material.isOpaque;
+                }) |
+                std::ranges::to<std::vector>();
+
+  recordFrame(m_cmd[m_frame].cmd, m_opaquePipeline, opaque, m_desc,
               static_cast<uint32_t>(m_frame), m_sc.images[imageIndex],
               m_sc.views[imageIndex], m_depths[imageIndex].image,
               m_depths[imageIndex].view, m_sc.extent, drawData);

@@ -71,7 +71,10 @@ struct Light {
         .ibuf = ibuf,
         .indexCount = static_cast<uint32_t>(indices.size()),
         .indexType = VK_INDEX_TYPE_UINT32,
-        .textureIndex = static_cast<uint32_t>(textureCount),
+        .material =
+            Material{
+                .textureIndex = static_cast<uint32_t>(textureCount),
+            },
     };
     hasGizmo = true;
   }

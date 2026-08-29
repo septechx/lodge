@@ -1,10 +1,11 @@
 #include "render.hpp"
 
 #include "src/math/Mat4.hpp"
+#include "src/render/pipelines/pipeline.hpp"
 #include "src/render/utils.hpp"
 
 #include <imgui_impl_vulkan.h>
-#include <vulkan/vulkan_core.h>
+#include <spdlog/spdlog.h>
 
 static constexpr Mat4 mat4FromNormalMat3(const Mat3 &n) {
   Mat4 r = Mat4::IDENTITY;
@@ -42,8 +43,7 @@ CmdBundle createCmd(VkDevice device, uint32_t queueFamily) {
   return CmdBundle{pool, cmd};
 }
 
-void recordFrame(VkCommandBuffer cmd, VkPipeline pipeline,
-                 VkPipelineLayout layout,
+void recordFrame(VkCommandBuffer cmd, GraphicsPipeline pipeline,
                  const std::vector<RenderObject> &objects,
                  const SceneDescriptors &descriptors, uint32_t frameIndex,
                  VkImage image, VkImageView view, VkImage depthImage,
@@ -127,15 +127,15 @@ void recordFrame(VkCommandBuffer cmd, VkPipeline pipeline,
   VkRect2D scissor = {{0, 0}, extent};
   vkCmdSetScissor(cmd, 0, 1, &scissor);
 
-  vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline);
+  vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline.pipeline);
 
   for (const RenderObject &object : objects) {
-    uint32_t texIdx = object.textureIndex;
+    uint32_t texIdx = object.material.textureIndex;
     if (texIdx >= descriptors.textureCount)
       texIdx = 0;
     VkDescriptorSet set = descriptors.get(frameIndex, texIdx);
-    vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, layout, 0, 1,
-                            &set, 0, nullptr);
+    vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS,
+                            pipeline.layout, 0, 1, &set, 0, nullptr);
 
     VkDeviceSize offset = 0;
     vkCmdBindVertexBuffers(cmd, 0, 1, &object.vbuf.buffer, &offset);
@@ -144,7 +144,7 @@ void recordFrame(VkCommandBuffer cmd, VkPipeline pipeline,
         .model = object.worldMat,
         .normal = mat4FromNormalMat3(object.worldMat.normalMatrix()),
     };
-    vkCmdPushConstants(cmd, layout, VK_SHADER_STAGE_VERTEX_BIT, 0,
+    vkCmdPushConstants(cmd, pipeline.layout, VK_SHADER_STAGE_VERTEX_BIT, 0,
                        sizeof(PushConstants), &pc);
     vkCmdDrawIndexed(cmd, object.indexCount, 1, 0, 0, 0);
   }

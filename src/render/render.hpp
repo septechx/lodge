@@ -1,6 +1,7 @@
 #pragma once
 
 #include "src/render/buffers.hpp"
+#include "src/render/pipelines/pipeline.hpp"
 #include "src/render/render_object.hpp"
 
 #include <imgui.h>
@@ -15,8 +16,7 @@ struct CmdBundle {
 
 CmdBundle createCmd(VkDevice device, uint32_t queueFamily);
 
-void recordFrame(VkCommandBuffer cmd, VkPipeline pipeline,
-                 VkPipelineLayout layout,
+void recordFrame(VkCommandBuffer cmd, GraphicsPipeline pipeline,
                  const std::vector<RenderObject> &objects,
                  const SceneDescriptors &descriptors, uint32_t frameIndex,
                  VkImage image, VkImageView view, VkImage depthImage,

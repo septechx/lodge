@@ -382,14 +382,20 @@ buildObjects(const Device &dev, const tinygltf3::Model &model,
 
         uint32_t texIndex = fallbackTex;
         float baseColorFactor[4] = {1.0f, 1.0f, 1.0f, 1.0f};
+        bool isOpaque = true;
         bool doubleSided = false;
         if (prim->material >= 0 &&
             static_cast<uint32_t>(prim->material) < model->materials_count) {
           const tg3_material *mat = &model->materials[prim->material];
+
+          isOpaque = strncmp(mat->alpha_mode.data, "BLEND", 5) != 0;
+
           doubleSided = mat->double_sided != 0;
+
           for (int c = 0; c < 4; ++c)
             baseColorFactor[c] = static_cast<float>(
                 mat->pbr_metallic_roughness.base_color_factor[c]);
+
           int texIdx = mat->pbr_metallic_roughness.base_color_texture.index;
           if (texIdx >= 0 && static_cast<uint32_t>(texIdx) < textures.size()) {
             texIndex = static_cast<uint32_t>(texIdx);
@@ -402,16 +408,20 @@ buildObjects(const Device &dev, const tinygltf3::Model &model,
           spdlog::warn("primitive material {} out of range", prim->material);
         }
 
+        Material mat{
+            .textureIndex = texIndex,
+            .baseColorFactor = {baseColorFactor[0], baseColorFactor[1],
+                                baseColorFactor[2], baseColorFactor[3]},
+            .doubleSided = doubleSided,
+            .isOpaque = isOpaque,
+        };
         RenderObject obj{
             .worldMat = world,
             .vbuf = vbuf,
             .ibuf = ibuf,
             .indexCount = static_cast<uint32_t>(idxAcc->count),
             .indexType = idxType,
-            .textureIndex = texIndex,
-            .baseColorFactor = {baseColorFactor[0], baseColorFactor[1],
-                                baseColorFactor[2], baseColorFactor[3]},
-            .doubleSided = doubleSided,
+            .material = mat,
         };
         objects.push_back(obj);
       }
