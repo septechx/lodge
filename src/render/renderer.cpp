@@ -46,8 +46,8 @@ Renderer::Renderer(GLFWwindow &window) : m_window(window) {
   m_depthFormat = findDepthFormat(m_dev.physical);
   m_depths.resize(m_sc.imageCount);
   for (uint32_t i = 0; i < m_sc.imageCount; ++i)
-    m_depths[i] = createDepthBuffer(m_dev.device, m_dev.physical, m_depthFormat,
-                                    m_sc.extent.width, m_sc.extent.height);
+    m_depths[i] = createDepthBuffer(m_dev, m_depthFormat, m_sc.extent.width,
+                                    m_sc.extent.height);
 
   LoadedModel loaded = loadModel(m_dev, "models/car3.glb");
   m_renderObjects = std::move(loaded.objects);
@@ -59,11 +59,10 @@ Renderer::Renderer(GLFWwindow &window) : m_window(window) {
   m_light.createGizmo(m_dev, m_textures.size() - 1);
 
   for (int i = 0; i < MAX_FRAMES_IN_FLIGHT; ++i)
-    m_cameraUniforms[i] =
-        createCameraUniformBuffer(m_dev.device, m_dev.physical);
+    m_cameraUniforms[i] = createCameraUniformBuffer(m_dev);
 
   for (int i = 0; i < MAX_FRAMES_IN_FLIGHT; ++i)
-    m_lights[i] = createLightUniformBuffer(m_dev.device, m_dev.physical);
+    m_lights[i] = createLightUniformBuffer(m_dev);
 
   m_desc = createSceneDescriptors(m_dev.device, m_textures, m_cameraUniforms,
                                   m_lights);
@@ -127,8 +126,8 @@ void Renderer::recreateSwapchain() {
 
   m_depths.resize(m_sc.imageCount);
   for (uint32_t i = 0; i < m_sc.imageCount; ++i)
-    m_depths[i] = createDepthBuffer(m_dev.device, m_dev.physical, m_depthFormat,
-                                    m_sc.extent.width, m_sc.extent.height);
+    m_depths[i] = createDepthBuffer(m_dev, m_depthFormat, m_sc.extent.width,
+                                    m_sc.extent.height);
 
   if (ImGui::GetCurrentContext() != nullptr) {
     ImGui_ImplVulkan_SetMinImageCount(m_sc.imageCount);

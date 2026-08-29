@@ -46,66 +46,65 @@ static ShaderModules loadShaders(VkDevice device) {
   return modules;
 }
 
-AllocatedBuffer createVertexBuffer(VkDevice device, VkPhysicalDevice physical,
-                                   const void *data, VkDeviceSize size) {
+AllocatedBuffer createVertexBuffer(Device device, const void *data,
+                                   VkDeviceSize size) {
   AllocatedBuffer buf =
-      createBuffer(device, physical, size, VK_BUFFER_USAGE_VERTEX_BUFFER_BIT,
+      createBuffer(device, size, VK_BUFFER_USAGE_VERTEX_BUFFER_BIT,
                    VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT |
                        VK_MEMORY_PROPERTY_HOST_COHERENT_BIT);
   void *dst = nullptr;
-  CHECK_VK(vkMapMemory(device, buf.memory, 0, size, 0, &dst),
+  CHECK_VK(vkMapMemory(device.device, buf.memory, 0, size, 0, &dst),
            "map vertex memory");
   memcpy(dst, data, static_cast<size_t>(size));
-  vkUnmapMemory(device, buf.memory);
+  vkUnmapMemory(device.device, buf.memory);
 
   return buf;
 }
 
-AllocatedBuffer createIndexBuffer(VkDevice device, VkPhysicalDevice physical,
-                                  const void *data, VkDeviceSize size) {
+AllocatedBuffer createIndexBuffer(Device device, const void *data,
+                                  VkDeviceSize size) {
   AllocatedBuffer buf =
-      createBuffer(device, physical, size, VK_BUFFER_USAGE_INDEX_BUFFER_BIT,
+      createBuffer(device, size, VK_BUFFER_USAGE_INDEX_BUFFER_BIT,
                    VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT |
                        VK_MEMORY_PROPERTY_HOST_COHERENT_BIT);
   void *dst = nullptr;
-  CHECK_VK(vkMapMemory(device, buf.memory, 0, size, 0, &dst),
+  CHECK_VK(vkMapMemory(device.device, buf.memory, 0, size, 0, &dst),
            "map index memory");
   memcpy(dst, data, static_cast<size_t>(size));
-  vkUnmapMemory(device, buf.memory);
+  vkUnmapMemory(device.device, buf.memory);
 
   return buf;
 }
 
-CameraUniformBuffer createCameraUniformBuffer(VkDevice device,
-                                              VkPhysicalDevice physical) {
-  AllocatedBuffer buf = createBuffer(device, physical, sizeof(CameraData),
+CameraUniformBuffer createCameraUniformBuffer(Device device) {
+  AllocatedBuffer buf = createBuffer(device, sizeof(CameraData),
                                      VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT,
                                      VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT |
                                          VK_MEMORY_PROPERTY_HOST_COHERENT_BIT);
   void *mapped = nullptr;
-  CHECK_VK(vkMapMemory(device, buf.memory, 0, sizeof(CameraData), 0, &mapped),
-           "map camera uniform");
+  CHECK_VK(
+      vkMapMemory(device.device, buf.memory, 0, sizeof(CameraData), 0, &mapped),
+      "map camera uniform");
   return CameraUniformBuffer{buf.buffer, buf.memory,
                              static_cast<CameraData *>(mapped)};
 }
 
-LightUniformBuffer createLightUniformBuffer(VkDevice device,
-                                            VkPhysicalDevice physical) {
-  AllocatedBuffer buf = createBuffer(device, physical, sizeof(LightData),
+LightUniformBuffer createLightUniformBuffer(Device device) {
+  AllocatedBuffer buf = createBuffer(device, sizeof(LightData),
                                      VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT,
                                      VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT |
                                          VK_MEMORY_PROPERTY_HOST_COHERENT_BIT);
   void *mapped = nullptr;
-  CHECK_VK(vkMapMemory(device, buf.memory, 0, sizeof(LightData), 0, &mapped),
-           "map light uniform");
+  CHECK_VK(
+      vkMapMemory(device.device, buf.memory, 0, sizeof(LightData), 0, &mapped),
+      "map light uniform");
   return LightUniformBuffer{buf.buffer, buf.memory,
                             static_cast<LightData *>(mapped)};
 }
 
-DepthBuffer createDepthBuffer(VkDevice device, VkPhysicalDevice physical,
-                              VkFormat format, uint32_t width,
+DepthBuffer createDepthBuffer(Device device, VkFormat format, uint32_t width,
                               uint32_t height) {
-  AllocatedImage img = createImage(device, physical, width, height, format,
+  AllocatedImage img = createImage(device, width, height, format,
                                    VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT);
 
   VkImageViewCreateInfo vi = {
@@ -116,7 +115,8 @@ DepthBuffer createDepthBuffer(VkDevice device, VkPhysicalDevice physical,
       .subresourceRange = {VK_IMAGE_ASPECT_DEPTH_BIT, 0, 1, 0, 1},
   };
   VkImageView view;
-  CHECK_VK(vkCreateImageView(device, &vi, nullptr, &view), "create depth view");
+  CHECK_VK(vkCreateImageView(device.device, &vi, nullptr, &view),
+           "create depth view");
 
   return DepthBuffer{img.image, img.memory, view, format};
 }

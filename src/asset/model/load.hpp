@@ -1,7 +1,6 @@
 #pragma once
 
 #include "../../asset/texture/load.hpp"
-#include "../../render/init.hpp"
 #include "../../render/render_object.hpp"
 
 #include <filesystem>

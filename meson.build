@@ -56,6 +56,7 @@ executable(
   'src/render/pipeline.cpp',
   'src/render/renderer.cpp',
   'src/render/render.cpp',
+  'src/render/device.cpp',
   deps_sources,
   sources: shader_deps,
   dependencies: deps,

@@ -1,5 +1,6 @@
 #pragma once
 
+#include "device.hpp"
 #include <vulkan/vulkan.h>
 
 struct AllocatedBuffer {
@@ -7,8 +8,8 @@ struct AllocatedBuffer {
   VkDeviceMemory memory;
 };
 
-AllocatedBuffer createBuffer(VkDevice device, VkPhysicalDevice physical,
-                             VkDeviceSize size, VkBufferUsageFlags usage,
+AllocatedBuffer createBuffer(Device device, VkDeviceSize size,
+                             VkBufferUsageFlags usage,
                              VkMemoryPropertyFlags props);
 
 struct AllocatedImage {
@@ -16,6 +17,5 @@ struct AllocatedImage {
   VkDeviceMemory memory;
 };
 
-AllocatedImage createImage(VkDevice device, VkPhysicalDevice physical,
-                           uint32_t width, uint32_t height, VkFormat format,
-                           VkImageUsageFlags usage);
+AllocatedImage createImage(Device device, uint32_t width, uint32_t height,
+                           VkFormat format, VkImageUsageFlags usage);

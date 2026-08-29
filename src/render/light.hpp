@@ -1,7 +1,7 @@
 #pragma once
 
 #include "../math/Vec3.hpp"
-#include "init.hpp"
+#include "device.hpp"
 #include "pipeline.hpp"
 #include "render_object.hpp"
 #include "vertex.hpp"
@@ -60,11 +60,10 @@ struct Light {
       indices.push_back(b + 3);
     }
 
-    AllocatedBuffer vbuf = createVertexBuffer(
-        dev.device, dev.physical, verts.data(), verts.size() * sizeof(Vertex));
-    AllocatedBuffer ibuf =
-        createIndexBuffer(dev.device, dev.physical, indices.data(),
-                          indices.size() * sizeof(uint32_t));
+    AllocatedBuffer vbuf =
+        createVertexBuffer(dev, verts.data(), verts.size() * sizeof(Vertex));
+    AllocatedBuffer ibuf = createIndexBuffer(dev, indices.data(),
+                                             indices.size() * sizeof(uint32_t));
 
     gizmo = RenderObject{
         .worldMat = Mat4::IDENTITY,

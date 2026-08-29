@@ -9,15 +9,6 @@ VkInstance createInstance();
 
 void destroyInstance(VkInstance instance);
 
-struct Device {
-  VkPhysicalDevice physical;
-  VkDevice device;
-  uint32_t queueFamily;
-  VkQueue queue;
-};
-
-Device createDevice(VkInstance instance, VkSurfaceKHR surface);
-
 struct Swapchain {
   VkSurfaceKHR surface;
   VkSwapchainKHR swapchain;

@@ -375,11 +375,9 @@ buildObjects(const Device &dev, const tinygltf3::Model &model,
           exit(1);
         }
 
-        AllocatedBuffer vbuf =
-            createVertexBuffer(dev.device, dev.physical, vertices.data(),
-                               vertices.size() * sizeof(Vertex));
-        AllocatedBuffer ibuf =
-            createIndexBuffer(dev.device, dev.physical, idxData, idxBytes);
+        AllocatedBuffer vbuf = createVertexBuffer(
+            dev, vertices.data(), vertices.size() * sizeof(Vertex));
+        AllocatedBuffer ibuf = createIndexBuffer(dev, idxData, idxBytes);
 
         uint32_t texIndex = fallbackTex;
         float baseColorFactor[4] = {1.0f, 1.0f, 1.0f, 1.0f};

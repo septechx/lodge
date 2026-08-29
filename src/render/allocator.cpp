@@ -15,8 +15,8 @@ static uint32_t findMemoryType(VkPhysicalDevice physical, uint32_t typeBits,
   exit(1);
 }
 
-AllocatedBuffer createBuffer(VkDevice device, VkPhysicalDevice physical,
-                             VkDeviceSize size, VkBufferUsageFlags usage,
+AllocatedBuffer createBuffer(Device device, VkDeviceSize size,
+                             VkBufferUsageFlags usage,
                              VkMemoryPropertyFlags props) {
   VkBufferCreateInfo bci = {
       .sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO,
@@ -25,26 +25,27 @@ AllocatedBuffer createBuffer(VkDevice device, VkPhysicalDevice physical,
       .sharingMode = VK_SHARING_MODE_EXCLUSIVE,
   };
   VkBuffer buffer;
-  CHECK_VK(vkCreateBuffer(device, &bci, nullptr, &buffer), "create buffer");
+  CHECK_VK(vkCreateBuffer(device.device, &bci, nullptr, &buffer),
+           "create buffer");
 
   VkMemoryRequirements req;
-  vkGetBufferMemoryRequirements(device, buffer, &req);
-  uint32_t type = findMemoryType(physical, req.memoryTypeBits, props);
+  vkGetBufferMemoryRequirements(device.device, buffer, &req);
+  uint32_t type = findMemoryType(device.physical, req.memoryTypeBits, props);
   VkMemoryAllocateInfo ai = {
       .sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO,
       .allocationSize = req.size,
       .memoryTypeIndex = type,
   };
   VkDeviceMemory memory;
-  CHECK_VK(vkAllocateMemory(device, &ai, nullptr, &memory), "alloc memory");
-  CHECK_VK(vkBindBufferMemory(device, buffer, memory, 0), "bind memory");
+  CHECK_VK(vkAllocateMemory(device.device, &ai, nullptr, &memory),
+           "alloc memory");
+  CHECK_VK(vkBindBufferMemory(device.device, buffer, memory, 0), "bind memory");
 
   return AllocatedBuffer{buffer, memory};
 }
 
-AllocatedImage createImage(VkDevice device, VkPhysicalDevice physical,
-                           uint32_t width, uint32_t height, VkFormat format,
-                           VkImageUsageFlags usage) {
+AllocatedImage createImage(Device device, uint32_t width, uint32_t height,
+                           VkFormat format, VkImageUsageFlags usage) {
   VkImageCreateInfo ici = {
       .sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO,
       .imageType = VK_IMAGE_TYPE_2D,
@@ -59,11 +60,11 @@ AllocatedImage createImage(VkDevice device, VkPhysicalDevice physical,
       .initialLayout = VK_IMAGE_LAYOUT_UNDEFINED,
   };
   VkImage image;
-  CHECK_VK(vkCreateImage(device, &ici, nullptr, &image), "create image");
+  CHECK_VK(vkCreateImage(device.device, &ici, nullptr, &image), "create image");
 
   VkMemoryRequirements req;
-  vkGetImageMemoryRequirements(device, image, &req);
-  uint32_t type = findMemoryType(physical, req.memoryTypeBits,
+  vkGetImageMemoryRequirements(device.device, image, &req);
+  uint32_t type = findMemoryType(device.physical, req.memoryTypeBits,
                                  VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
   VkMemoryAllocateInfo ai = {
       .sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO,
@@ -71,8 +72,10 @@ AllocatedImage createImage(VkDevice device, VkPhysicalDevice physical,
       .memoryTypeIndex = type,
   };
   VkDeviceMemory memory;
-  CHECK_VK(vkAllocateMemory(device, &ai, nullptr, &memory), "alloc image mem");
-  CHECK_VK(vkBindImageMemory(device, image, memory, 0), "bind image mem");
+  CHECK_VK(vkAllocateMemory(device.device, &ai, nullptr, &memory),
+           "alloc image mem");
+  CHECK_VK(vkBindImageMemory(device.device, image, memory, 0),
+           "bind image mem");
 
   return AllocatedImage{image, memory};
 }

@@ -8,11 +8,11 @@
 #include "../math/Mat4.hpp"
 #include "allocator.hpp"
 
-AllocatedBuffer createVertexBuffer(VkDevice device, VkPhysicalDevice physical,
-                                   const void *data, VkDeviceSize size);
+AllocatedBuffer createVertexBuffer(Device device, const void *data,
+                                   VkDeviceSize size);
 
-AllocatedBuffer createIndexBuffer(VkDevice device, VkPhysicalDevice physical,
-                                  const void *data, VkDeviceSize size);
+AllocatedBuffer createIndexBuffer(Device device, const void *data,
+                                  VkDeviceSize size);
 
 struct CameraData {
   Mat4 viewproj;
@@ -24,8 +24,7 @@ struct CameraUniformBuffer {
   CameraData *mapped;
 };
 
-CameraUniformBuffer createCameraUniformBuffer(VkDevice device,
-                                              VkPhysicalDevice physical);
+CameraUniformBuffer createCameraUniformBuffer(Device device);
 
 struct LightData {
   Vec3 lightPos;
@@ -61,8 +60,7 @@ struct LightUniformBuffer {
   LightData *mapped;
 };
 
-LightUniformBuffer createLightUniformBuffer(VkDevice device,
-                                            VkPhysicalDevice physical);
+LightUniformBuffer createLightUniformBuffer(Device device);
 
 struct DepthBuffer {
   VkImage image;
@@ -71,8 +69,8 @@ struct DepthBuffer {
   VkFormat format;
 };
 
-DepthBuffer createDepthBuffer(VkDevice device, VkPhysicalDevice physical,
-                              VkFormat format, uint32_t width, uint32_t height);
+DepthBuffer createDepthBuffer(Device device, VkFormat format, uint32_t width,
+                              uint32_t height);
 
 struct SceneDescriptors {
   VkDescriptorSetLayout layout;
