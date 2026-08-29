@@ -5,6 +5,20 @@
 #include "utils.hpp"
 #include <vulkan/vulkan_core.h>
 
+static constexpr Mat4 mat4FromNormalMat3(const Mat3 &n) {
+  Mat4 r = Mat4::IDENTITY;
+  r(0, 0) = n(0, 0);
+  r(1, 0) = n(1, 0);
+  r(2, 0) = n(2, 0);
+  r(0, 1) = n(0, 1);
+  r(1, 1) = n(1, 1);
+  r(2, 1) = n(2, 1);
+  r(0, 2) = n(0, 2);
+  r(1, 2) = n(1, 2);
+  r(2, 2) = n(2, 2);
+  return r;
+}
+
 CmdBundle createCmd(VkDevice device, uint32_t queueFamily) {
   VkCommandPoolCreateInfo cpi = {
       .sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO,

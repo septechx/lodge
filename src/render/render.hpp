@@ -3,8 +3,8 @@
 #include <vector>
 #include <vulkan/vulkan.h>
 
+#include "buffers.hpp"
 #include "imgui.h"
-#include "pipeline.hpp"
 #include "render_object.hpp"
 
 struct CmdBundle {

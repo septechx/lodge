@@ -1,8 +1,8 @@
 #pragma once
 
 #include "../math/Vec3.hpp"
+#include "buffers.hpp"
 #include "device.hpp"
-#include "pipeline.hpp"
 #include "render_object.hpp"
 #include "vertex.hpp"
 

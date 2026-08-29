@@ -3,7 +3,7 @@
 #include "../../math/Quat.hpp"
 #include "../../math/Vec2.hpp"
 #include "../../render/allocator.hpp"
-#include "../../render/pipeline.hpp"
+#include "../../render/buffers.hpp"
 #include "../../render/vertex.hpp"
 #include "../../utils.hpp"
 #include "tiny_gltf_v3.h"
