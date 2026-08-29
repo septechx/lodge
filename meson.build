@@ -27,8 +27,8 @@ deps_sources = files(
 )
 
 shaders = [
-  ['shader.vert', 'vertex'],
-  ['shader.frag', 'fragment'],
+  ['shaders/opaque.vert', 'opaque.vert.spv'],
+  ['shaders/opaque.frag', 'opaque.frag.spv'],
 ]
 
 shader_deps = []
@@ -36,7 +36,7 @@ foreach shader : shaders
   shader_deps += custom_target(
     'spirv_@0@'.format(shader[1]),
     input: shader[0],
-    output: '@0@.spv'.format(shader[0]),
+    output: shader[1],
     command: ['glslc', '@INPUT@', '-o', '@OUTPUT@'],
     build_by_default: true,
   )
@@ -60,6 +60,7 @@ executable(
   'src/render/buffers.cpp',
   'src/render/pipelines/pipeline.cpp',
   'src/render/pipelines/opaque.cpp',
+  'src/render/pipelines/transparent.cpp',
   deps_sources,
   sources: shader_deps,
   dependencies: deps,

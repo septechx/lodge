@@ -10,12 +10,17 @@ layout(binding = 2) uniform LightData {
 layout(location = 0) in vec2 fragUV;
 layout(location = 1) in vec3 fragNormal;
 layout(location = 2) in vec3 fragPos;
+layout(location = 3) in vec4 fragColor;
 
 layout(location = 0) out vec4 outColor;
 
 void main() {
     vec4 sampled = texture(texSampler, fragUV);
-    vec3 base = sampled.rgb;
+    vec4 base = sampled * fragColor;
+
+    if (base.a < 0.5) discard;
+
+    vec3 baseRgb = base.rgb;
 
     vec3 norm = normalize(fragNormal);
     vec3 lightDir = normalize(lightData.lightPos - fragPos);
@@ -29,7 +34,7 @@ void main() {
     vec3 specular = specularStrength * spec * lightData.lightColor;
 
     float ambient = 0.10;
-    vec3 result = (ambient + diffuse + specular) * base;
+    vec3 result = (ambient + diffuse + specular) * baseRgb;
 
-    outColor = vec4(result, sampled.a);
+    outColor = vec4(result, base.a);
 }

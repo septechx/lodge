@@ -4,6 +4,7 @@
 #include "src/consts.hpp"
 #include "src/render/init.hpp"
 #include "src/render/pipelines/opaque.hpp"
+#include "src/render/pipelines/transparent.hpp"
 #include "src/render/render.hpp"
 #include "src/render/render_object.hpp"
 #include "src/render/utils.hpp"
@@ -69,8 +70,12 @@ Renderer::Renderer(GLFWwindow &window) : m_window(window) {
   m_desc = createSceneDescriptors(m_dev.device, m_textures, m_cameraUniforms,
                                   m_lights);
 
-  m_opaquePipeline = createOpaquePipeline(
-      m_dev.device, m_sc.format, m_depthFormat, m_sc.extent, m_desc.layout);
+  m_pipelines = {
+      .opaque = createOpaquePipeline(m_dev.device, m_sc.format, m_depthFormat,
+                                     m_sc.extent, m_desc.layout),
+      .transparent = createTransparentPipeline(
+          m_dev.device, m_sc.format, m_depthFormat, m_sc.extent, m_desc.layout),
+  };
 
   for (int i = 0; i < MAX_FRAMES_IN_FLIGHT; ++i)
     m_cmd[i] = createCmd(m_dev.device, m_dev.queueFamily);
@@ -191,12 +196,7 @@ void Renderer::drawFrame() {
     frameObjects.push_back(m_light.gizmo);
   }
 
-  auto opaque = frameObjects | std::views::filter([](const auto &obj) {
-                  return obj.material.isOpaque;
-                }) |
-                std::ranges::to<std::vector>();
-
-  recordFrame(m_cmd[m_frame].cmd, m_opaquePipeline, opaque, m_desc,
+  recordFrame(m_cmd[m_frame].cmd, m_pipelines, frameObjects, m_desc,
               static_cast<uint32_t>(m_frame), m_sc.images[imageIndex],
               m_sc.views[imageIndex], m_depths[imageIndex].image,
               m_depths[imageIndex].view, m_sc.extent, drawData);
@@ -251,8 +251,10 @@ Renderer::~Renderer() {
   vkDestroyDescriptorPool(device, m_desc.pool, nullptr);
   vkDestroyDescriptorSetLayout(device, m_desc.layout, nullptr);
 
-  vkDestroyPipeline(device, m_opaquePipeline.pipeline, nullptr);
-  vkDestroyPipelineLayout(device, m_opaquePipeline.layout, nullptr);
+  vkDestroyPipeline(device, m_pipelines.opaque.pipeline, nullptr);
+  vkDestroyPipelineLayout(device, m_pipelines.opaque.layout, nullptr);
+  vkDestroyPipeline(device, m_pipelines.transparent.pipeline, nullptr);
+  vkDestroyPipelineLayout(device, m_pipelines.transparent.layout, nullptr);
 
   for (RenderObject obj : m_renderObjects) {
     vkDestroyBuffer(device, obj.vbuf.buffer, nullptr);

@@ -16,7 +16,7 @@ struct CmdBundle {
 
 CmdBundle createCmd(VkDevice device, uint32_t queueFamily);
 
-void recordFrame(VkCommandBuffer cmd, GraphicsPipeline pipeline,
+void recordFrame(VkCommandBuffer cmd, GraphicsPipelines pipelines,
                  const std::vector<RenderObject> &objects,
                  const SceneDescriptors &descriptors, uint32_t frameIndex,
                  VkImage image, VkImageView view, VkImage depthImage,

@@ -24,9 +24,10 @@ static void loadShader(VkDevice device, const std::filesystem::path path,
   }
 }
 
-ShaderModules loadShaders(VkDevice device) {
+ShaderModules loadShaders(VkDevice device, const std::filesystem::path &vert,
+                          const std::filesystem::path &frag) {
   ShaderModules modules;
-  loadShader(device, "build/shader.vert.spv", modules.vert);
-  loadShader(device, "build/shader.frag.spv", modules.frag);
+  loadShader(device, vert, modules.vert);
+  loadShader(device, frag, modules.frag);
   return modules;
 }

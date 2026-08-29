@@ -4,6 +4,7 @@
 #include "src/math/Vec2.hpp"
 #include "src/render/allocator.hpp"
 #include "src/render/buffers.hpp"
+#include "src/render/pipelines/pipeline.hpp"
 #include "src/render/vertex.hpp"
 #include "src/utils.hpp"
 
@@ -382,13 +383,13 @@ buildObjects(const Device &dev, const tinygltf3::Model &model,
 
         uint32_t texIndex = fallbackTex;
         float baseColorFactor[4] = {1.0f, 1.0f, 1.0f, 1.0f};
-        bool isOpaque = true;
+        bool isBlend = false;
         bool doubleSided = false;
         if (prim->material >= 0 &&
             static_cast<uint32_t>(prim->material) < model->materials_count) {
           const tg3_material *mat = &model->materials[prim->material];
 
-          isOpaque = strncmp(mat->alpha_mode.data, "BLEND", 5) != 0;
+          isBlend = strncmp(mat->alpha_mode.data, "BLEND", 5) == 0;
 
           doubleSided = mat->double_sided != 0;
 
@@ -413,7 +414,8 @@ buildObjects(const Device &dev, const tinygltf3::Model &model,
             .baseColorFactor = {baseColorFactor[0], baseColorFactor[1],
                                 baseColorFactor[2], baseColorFactor[3]},
             .doubleSided = doubleSided,
-            .isOpaque = isOpaque,
+            .pipeline = isBlend ? GraphicsPipelineType::Transparent
+                                : GraphicsPipelineType::Opaque,
         };
         RenderObject obj{
             .worldMat = world,

@@ -2,6 +2,7 @@
 
 #include "src/asset/texture/load.hpp"
 #include "src/math/Mat4.hpp"
+#include "src/math/Vec4.hpp"
 #include "src/render/allocator.hpp"
 
 #include <vector>
@@ -35,7 +36,10 @@ struct LightData {
 
 struct PushConstants {
   Mat4 model;
-  Mat4 normal;
+  Vec4 normal0;
+  Vec4 normal1;
+  Vec4 normal2;
+  Vec4 baseColor;
 };
 
 struct LightUniformBuffer {

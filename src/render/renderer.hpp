@@ -49,7 +49,7 @@ private:
   CameraUniformBuffer m_cameraUniforms[MAX_FRAMES_IN_FLIGHT];
   LightUniformBuffer m_lights[MAX_FRAMES_IN_FLIGHT];
   SceneDescriptors m_desc;
-  GraphicsPipeline m_opaquePipeline;
+  GraphicsPipelines m_pipelines;
   CmdBundle m_cmd[MAX_FRAMES_IN_FLIGHT];
   std::vector<VkSemaphore> m_submitSem;
   VkSemaphore m_acquireSem[MAX_FRAMES_IN_FLIGHT];
