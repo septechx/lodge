@@ -57,6 +57,7 @@ executable(
   'src/render/renderer.cpp',
   'src/render/render.cpp',
   'src/render/device.cpp',
+  'src/render/swapchain.cpp',
   deps_sources,
   sources: shader_deps,
   dependencies: deps,

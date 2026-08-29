@@ -4,6 +4,7 @@
 #include "../consts.hpp"
 #include "imgui.h"
 #include "imgui_impl_vulkan.h"
+#include "init.hpp"
 #include "pipeline.hpp"
 #include "render.hpp"
 #include "render_object.hpp"

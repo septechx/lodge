@@ -5,10 +5,10 @@
 
 #include "../asset/texture/load.hpp"
 #include "camera.hpp"
-#include "init.hpp"
 #include "light.hpp"
 #include "pipeline.hpp"
 #include "render.hpp"
+#include "swapchain.hpp"
 
 #include <vector>
 
