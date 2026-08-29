@@ -51,6 +51,7 @@ executable(
   'src/core/event.cpp',
   'src/core/layer_stack.cpp',
   'src/core/debug_layer.cpp',
+  'src/engine/engine.cpp',
   'src/asset/texture/load.cpp',
   'src/asset/model/load.cpp',
   'src/render/allocator.cpp',
