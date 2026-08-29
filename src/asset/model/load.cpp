@@ -12,11 +12,9 @@
 #include <tiny_gltf_v3.h>
 
 #include <algorithm>
-#include <cctype>
 #include <cstdint>
 #include <cstdlib>
 #include <cstring>
-#include <string>
 #include <string_view>
 #include <utility>
 #include <vector>

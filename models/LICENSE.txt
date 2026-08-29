@@ -1,5 +1,4 @@
 - Box2.glb: by septech, CC0
 - Box3.glb: by septech, CC0
 - Car3.glb: https://sketchfab.com/3d-models/mclaren-senna-gtr-18424b57728a40a6bd31040c6197da1c, CC-BY 4.0
-- Box4.glb: by septech, CC0
-- Box5.glb: by septech, CC0
+- Box6.glb: by septech, CC0

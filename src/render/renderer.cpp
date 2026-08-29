@@ -52,7 +52,7 @@ Renderer::Renderer(GLFWwindow &window) : m_window(window) {
     m_depths[i] = createDepthBuffer(m_dev, m_depthFormat, m_sc.extent.width,
                                     m_sc.extent.height);
 
-  LoadedModel loaded = loadModel(m_dev, "models/Box5.glb");
+  LoadedModel loaded = loadModel(m_dev, "models/Box6.glb");
   m_renderObjects = std::move(loaded.objects);
   m_textures = std::move(loaded.textures);
 
