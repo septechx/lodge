@@ -302,6 +302,14 @@ static uint32_t loadGltfTextures(AssetStore &store,
   return base;
 }
 
+static uint32_t resolveBaseColorTextureIndex(int texIdx, uint32_t textureBase,
+                                             uint32_t textureCount,
+                                             uint32_t fallbackIndex) {
+  if (texIdx < 0 || static_cast<uint32_t>(texIdx) >= textureCount)
+    return fallbackIndex;
+  return textureBase + texIdx;
+}
+
 static std::vector<ModelPart> buildParts(AssetStore &store,
                                          const tinygltf3::Model &model,
                                          uint32_t textureBase) {
@@ -379,7 +387,7 @@ static std::vector<ModelPart> buildParts(AssetStore &store,
             vertices.data(), vertices.size() * sizeof(Vertex), idxData,
             idxBytes, static_cast<uint32_t>(idxAcc->count), idxType);
 
-        uint32_t texIndex = textureBase;
+        uint32_t texIndex = store.whiteTexture().index;
         float baseColorFactor[4] = {1.0f, 1.0f, 1.0f, 1.0f};
         bool isBlend = false;
         bool doubleSided = false;
@@ -395,13 +403,14 @@ static std::vector<ModelPart> buildParts(AssetStore &store,
 
           int texIdx = mat->pbr_metallic_roughness.base_color_texture.index;
           if (texIdx >= 0 &&
-              static_cast<uint32_t>(texIdx) < modelTextureCount) {
-            texIndex = textureBase + static_cast<uint32_t>(texIdx);
-          } else if (texIdx >= 0) {
+              static_cast<uint32_t>(texIdx) >= modelTextureCount) {
             spdlog::warn("material {} baseColorTexture {} out of range, using "
                          "white fallback",
                          prim->material, texIdx);
           }
+          texIndex = resolveBaseColorTextureIndex(texIdx, textureBase,
+                                                  modelTextureCount,
+                                                  store.whiteTexture().index);
 
           bool alphaModeBlend = mat->alpha_mode.data != nullptr &&
                                 strncmp(mat->alpha_mode.data, "BLEND", 5) == 0;
