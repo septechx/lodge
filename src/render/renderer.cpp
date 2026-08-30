@@ -1,13 +1,13 @@
 #include "renderer.hpp"
 
-#include "src/asset/model/load.hpp"
+#include "src/asset/store.hpp"
 #include "src/consts.hpp"
 #include "src/render/init.hpp"
 #include "src/render/pipelines/opaque.hpp"
 #include "src/render/pipelines/transparent.hpp"
 #include "src/render/render.hpp"
-#include "src/render/render_object.hpp"
 #include "src/render/utils.hpp"
+#include "src/utils.hpp"
 
 #include <imgui.h>
 #include <imgui_impl_vulkan.h>
@@ -52,31 +52,6 @@ Renderer::Renderer(GLFWwindow &window) : m_window(window) {
     m_depths[i] = createDepthBuffer(m_dev, m_depthFormat, m_sc.extent.width,
                                     m_sc.extent.height);
 
-  LoadedModel loaded = loadModel(m_dev, "models/Box6.glb");
-  m_renderObjects = std::move(loaded.objects);
-  m_textures = std::move(loaded.textures);
-
-  uint8_t yellow[4] = {255, 230, 64, 255};
-  Texture lightTex = createTextureFromPixels(m_dev, 1, 1, yellow);
-  m_textures.push_back(lightTex);
-  m_light.createGizmo(m_dev, m_textures.size() - 1);
-
-  for (int i = 0; i < MAX_FRAMES_IN_FLIGHT; ++i)
-    m_cameraUniforms[i] = createCameraUniformBuffer(m_dev);
-
-  for (int i = 0; i < MAX_FRAMES_IN_FLIGHT; ++i)
-    m_lights[i] = createLightUniformBuffer(m_dev);
-
-  m_desc = createSceneDescriptors(m_dev.device, m_textures, m_cameraUniforms,
-                                  m_lights);
-
-  m_pipelines = {
-      .opaque = createOpaquePipeline(m_dev.device, m_sc.format, m_depthFormat,
-                                     m_sc.extent, m_desc.layout),
-      .transparent = createTransparentPipeline(
-          m_dev.device, m_sc.format, m_depthFormat, m_sc.extent, m_desc.layout),
-  };
-
   for (int i = 0; i < MAX_FRAMES_IN_FLIGHT; ++i)
     m_cmd[i] = createCmd(m_dev.device, m_dev.queueFamily);
 
@@ -97,8 +72,30 @@ Renderer::Renderer(GLFWwindow &window) : m_window(window) {
         .flags = VK_FENCE_CREATE_SIGNALED_BIT,
     };
     CHECK_VK(vkCreateFence(m_dev.device, &fci, nullptr, &m_frameFence[i]),
-             "create fence");
+             "create frame fence");
   }
+}
+
+void Renderer::initScene(const AssetStore &assets) {
+  LDG_ASSERT(!m_sceneInitialized);
+
+  for (int i = 0; i < MAX_FRAMES_IN_FLIGHT; ++i)
+    m_cameraUniforms[i] = createCameraUniformBuffer(m_dev);
+
+  for (int i = 0; i < MAX_FRAMES_IN_FLIGHT; ++i)
+    m_lights[i] = createLightUniformBuffer(m_dev);
+
+  m_desc = createSceneDescriptors(m_dev.device, assets.textures(),
+                                  m_cameraUniforms, m_lights);
+
+  m_pipelines = {
+      .opaque = createOpaquePipeline(m_dev.device, m_sc.format, m_depthFormat,
+                                     m_sc.extent, m_desc.layout),
+      .transparent = createTransparentPipeline(
+          m_dev.device, m_sc.format, m_depthFormat, m_sc.extent, m_desc.layout),
+  };
+
+  m_sceneInitialized = true;
 }
 
 void Renderer::onResize(uint32_t width, uint32_t height) {
@@ -141,7 +138,9 @@ void Renderer::recreateSwapchain() {
   }
 }
 
-void Renderer::drawFrame() {
+void Renderer::drawFrame(const FrameScene &frame) {
+  LDG_ASSERT(m_sceneInitialized);
+
   const VkDevice device = m_dev.device;
 
   if (m_swapchainDirty) {
@@ -170,12 +169,18 @@ void Renderer::drawFrame() {
 
   float aspect = static_cast<float>(m_sc.extent.width) /
                  static_cast<float>(m_sc.extent.height);
-  CameraData cameraData{m_camera.getViewProj(aspect)};
+
+  FrameCamera camera = frame.camera.value_or(FrameCamera{});
+  Vec3 forward = camera.rotation.rotate(Vec3{0.0f, 0.0f, -1.0f});
+  Vec3 up = camera.rotation.rotate(Vec3{0.0f, 1.0f, 0.0f});
+  Mat4 view = Mat4::lookAt(camera.position, camera.position + forward, up);
+  CameraData cameraData{
+      Mat4::perspective(camera.fovY, aspect, camera.nearZ, camera.farZ) * view};
   memcpy(m_cameraUniforms[m_frame].mapped, &cameraData, sizeof(CameraData));
 
-  LightData lightData{.lightPos = m_light.pos,
-                      .lightColor = Vec3{1.0f, 1.0f, 1.0f},
-                      .viewPos = m_camera.eye};
+  FrameLight light = frame.lights.front();
+  LightData lightData{
+      .lightPos = light.pos, .lightColor = light.color, .viewPos = camera.position};
   memcpy(m_lights[m_frame].mapped, &lightData, sizeof(LightData));
 
   ImDrawData *drawData = nullptr;
@@ -187,16 +192,7 @@ void Renderer::drawFrame() {
     }
   }
 
-  std::vector<RenderObject> frameObjects = m_renderObjects;
-  if (m_light.showGizmo && m_light.hasGizmo) {
-    Mat4 t = Mat4::translate(m_light.pos);
-    Mat4 s = Mat4::scale(
-        Vec3{m_light.gizmoSize, m_light.gizmoSize, m_light.gizmoSize});
-    m_light.gizmo.worldMat = t * s;
-    frameObjects.push_back(m_light.gizmo);
-  }
-
-  recordFrame(m_cmd[m_frame].cmd, m_pipelines, frameObjects, m_desc,
+  recordFrame(m_cmd[m_frame].cmd, m_pipelines, frame.objects, m_desc,
               static_cast<uint32_t>(m_frame), m_sc.images[imageIndex],
               m_sc.views[imageIndex], m_depths[imageIndex].image,
               m_depths[imageIndex].view, m_sc.extent, drawData);
@@ -238,8 +234,6 @@ Renderer::~Renderer() {
   const VkDevice device = m_dev.device;
   CHECK_VK(vkDeviceWaitIdle(device), "device idle");
 
-  m_light.destroyGizmo(m_dev);
-
   for (int i = 0; i < MAX_FRAMES_IN_FLIGHT; ++i) {
     vkDestroyCommandPool(device, m_cmd[i].pool, nullptr);
     vkDestroySemaphore(device, m_acquireSem[i], nullptr);
@@ -248,39 +242,26 @@ Renderer::~Renderer() {
   for (VkSemaphore sem : m_submitSem)
     vkDestroySemaphore(device, sem, nullptr);
 
-  vkDestroyDescriptorPool(device, m_desc.pool, nullptr);
-  vkDestroyDescriptorSetLayout(device, m_desc.layout, nullptr);
+  if (m_sceneInitialized) {
+    vkDestroyDescriptorPool(device, m_desc.pool, nullptr);
+    vkDestroyDescriptorSetLayout(device, m_desc.layout, nullptr);
 
-  vkDestroyPipeline(device, m_pipelines.opaque.pipeline, nullptr);
-  vkDestroyPipelineLayout(device, m_pipelines.opaque.layout, nullptr);
-  vkDestroyPipeline(device, m_pipelines.transparent.pipeline, nullptr);
-  vkDestroyPipelineLayout(device, m_pipelines.transparent.layout, nullptr);
+    vkDestroyPipeline(device, m_pipelines.opaque.pipeline, nullptr);
+    vkDestroyPipelineLayout(device, m_pipelines.opaque.layout, nullptr);
+    vkDestroyPipeline(device, m_pipelines.transparent.pipeline, nullptr);
+    vkDestroyPipelineLayout(device, m_pipelines.transparent.layout, nullptr);
 
-  for (RenderObject obj : m_renderObjects) {
-    vkDestroyBuffer(device, obj.vbuf.buffer, nullptr);
-    vkFreeMemory(device, obj.vbuf.memory, nullptr);
+    for (int i = 0; i < MAX_FRAMES_IN_FLIGHT; ++i) {
+      vkUnmapMemory(device, m_cameraUniforms[i].memory);
+      vkDestroyBuffer(device, m_cameraUniforms[i].buffer, nullptr);
+      vkFreeMemory(device, m_cameraUniforms[i].memory, nullptr);
+    }
 
-    vkDestroyBuffer(device, obj.ibuf.buffer, nullptr);
-    vkFreeMemory(device, obj.ibuf.memory, nullptr);
-  }
-
-  for (Texture tex : m_textures) {
-    vkDestroySampler(device, tex.sampler, nullptr);
-    vkDestroyImageView(device, tex.view, nullptr);
-    vkDestroyImage(device, tex.image, nullptr);
-    vkFreeMemory(device, tex.memory, nullptr);
-  }
-
-  for (int i = 0; i < MAX_FRAMES_IN_FLIGHT; ++i) {
-    vkUnmapMemory(device, m_cameraUniforms[i].memory);
-    vkDestroyBuffer(device, m_cameraUniforms[i].buffer, nullptr);
-    vkFreeMemory(device, m_cameraUniforms[i].memory, nullptr);
-  }
-
-  for (int i = 0; i < MAX_FRAMES_IN_FLIGHT; ++i) {
-    vkUnmapMemory(device, m_lights[i].memory);
-    vkDestroyBuffer(device, m_lights[i].buffer, nullptr);
-    vkFreeMemory(device, m_lights[i].memory, nullptr);
+    for (int i = 0; i < MAX_FRAMES_IN_FLIGHT; ++i) {
+      vkUnmapMemory(device, m_lights[i].memory);
+      vkDestroyBuffer(device, m_lights[i].buffer, nullptr);
+      vkFreeMemory(device, m_lights[i].memory, nullptr);
+    }
   }
 
   destroySwapchainResources();

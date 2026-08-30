@@ -874,3 +874,33 @@ TEST_CASE("Quat rotate", "[Quat]") {
     REQUIRE(vec3AlmostEqual(rCombined, rSequential, 1e-4f));
   }
 }
+
+TEST_CASE("Quat fromMat3", "[Quat]") {
+  auto roundTrip = [](Quat q) {
+    Mat3 m = Mat4::fromQuat(q).upper3x3();
+    Quat extracted = Quat::fromMat3(m);
+    return quatAlmostEqual(q, extracted, 1e-4f);
+  };
+
+  SECTION("axis rotations through every branch") {
+    // trace branch, x-branch, y-branch, z-branch
+    REQUIRE(roundTrip(Quat::fromAxisAngle({1, 0, 0}, PI / 3.0f).normalize()));
+    REQUIRE(roundTrip(Quat::fromAxisAngle({0, 1, 0}, 2.0f * PI / 3.0f).normalize()));
+    REQUIRE(roundTrip(Quat::fromAxisAngle({0, 0, 1}, PI * 0.9f).normalize()));
+    REQUIRE(roundTrip(Quat::fromAxisAngle({1, 1, 1}, PI / 3.0f).normalize()));
+  }
+
+  SECTION("half turns hit non-trace branches") {
+    REQUIRE(roundTrip(Quat{0.0f, 1.0f, 0.0f, 0.0f}));
+    REQUIRE(roundTrip(Quat{0.0f, 0.0f, 1.0f, 0.0f}));
+    REQUIRE(roundTrip(Quat{0.0f, 0.0f, 0.0f, 1.0f}));
+  }
+
+  SECTION("Box6.glb cube node rotation") {
+    Quat node{0.8446232080459595f, 0.19134169816970825f, 0.19134171307086945f,
+              -0.4619397521018982f};
+    Quat normalized = node.normalize();
+    Mat3 m = Mat4::fromQuat(normalized).upper3x3();
+    REQUIRE(quatAlmostEqual(normalized, Quat::fromMat3(m), 1e-4f));
+  }
+}

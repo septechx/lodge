@@ -1,11 +1,10 @@
 #pragma once
 
-#include "src/asset/texture/load.hpp"
-#include "src/render/camera.hpp"
-#include "src/render/light.hpp"
+#include "src/asset/store.hpp"
 #include "src/render/pipelines/pipeline.hpp"
 #include "src/render/render.hpp"
 #include "src/render/swapchain.hpp"
+#include "src/scene/extract.hpp"
 
 #define GLFW_INCLUDE_VULKAN
 #include <GLFW/glfw3.h>
@@ -16,14 +15,11 @@ class Renderer {
 public:
   Renderer(GLFWwindow &window);
   ~Renderer();
-  void drawFrame();
+
+  void initScene(const AssetStore &assets);
+
+  void drawFrame(const FrameScene &frame);
   void onResize(uint32_t width, uint32_t height);
-
-  Camera &getCamera() { return m_camera; }
-  const Camera &getCamera() const { return m_camera; }
-
-  Light &getLight() { return m_light; }
-  const Light &getLight() const { return m_light; }
 
   VkInstance getInstance() const { return m_instance; }
   Device &getDevice() { return m_dev; }
@@ -43,9 +39,8 @@ private:
   Swapchain m_sc;
   VkFormat m_depthFormat;
   std::vector<DepthBuffer> m_depths;
-  std::vector<RenderObject> m_renderObjects;
   bool m_swapchainDirty = false;
-  std::vector<Texture> m_textures;
+  bool m_sceneInitialized = false;
   CameraUniformBuffer m_cameraUniforms[MAX_FRAMES_IN_FLIGHT];
   LightUniformBuffer m_lights[MAX_FRAMES_IN_FLIGHT];
   SceneDescriptors m_desc;
@@ -55,6 +50,4 @@ private:
   VkSemaphore m_acquireSem[MAX_FRAMES_IN_FLIGHT];
   VkFence m_frameFence[MAX_FRAMES_IN_FLIGHT];
   int m_frame = 0;
-  Camera m_camera;
-  Light m_light;
 };

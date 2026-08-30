@@ -50,10 +50,14 @@ executable(
   'src/utils.cpp',
   'src/core/event.cpp',
   'src/core/layer_stack.cpp',
+  'src/core/control_layer.cpp',
   'src/core/debug_layer.cpp',
   'src/engine/engine.cpp',
   'src/asset/texture/load.cpp',
   'src/asset/model/load.cpp',
+  'src/asset/store.cpp',
+  'src/scene/scene.cpp',
+  'src/scene/extract.cpp',
   'src/render/allocator.cpp',
   'src/render/init.cpp',
   'src/render/renderer.cpp',
@@ -85,4 +89,13 @@ if catch2_dep.found()
     include_directories: include_directories('src'),
   )
   test('math', test_math)
+
+  test_scene = executable(
+    'test_scene',
+    'tests/test_scene.cpp',
+    'src/scene/scene.cpp',
+    dependencies: catch2_dep,
+    include_directories: include_directories('src'),
+  )
+  test('scene', test_scene)
 endif

@@ -2,12 +2,17 @@
 
 #include "src/core/layer.hpp"
 #include "src/render/renderer.hpp"
+#include "src/scene/game_object.hpp"
+#include "src/scene/scene.hpp"
 
 #include <GLFW/glfw3.h>
 
+class AssetStore;
+
 class DebugLayer final : public Layer {
 public:
-  DebugLayer(GLFWwindow &window, Renderer &renderer);
+  DebugLayer(GLFWwindow &window, Renderer &renderer, AssetStore &assets,
+             Scene &scene);
   ~DebugLayer() override;
 
   void onAttach() override;
@@ -21,10 +26,14 @@ public:
 private:
   void updateFreeFly(float dt);
   void syncYawPitchFromCamera();
+  void applyYawPitch(Transform &transform);
   void buildUI(float dt);
+  GameObject *camera();
 
   GLFWwindow &m_window;
   Renderer &m_renderer;
+  AssetStore &m_assets;
+  Scene &m_scene;
 
   bool m_visible = true;
   bool m_initialized = false;

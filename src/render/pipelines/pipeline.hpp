@@ -9,11 +9,6 @@ struct GraphicsPipeline {
   VkPipelineLayout layout;
 };
 
-enum class GraphicsPipelineType {
-  Opaque,
-  Transparent,
-};
-
 struct GraphicsPipelines {
   GraphicsPipeline opaque;
   GraphicsPipeline transparent;

@@ -30,7 +30,7 @@ CmdBundle createCmd(VkDevice device, uint32_t queueFamily) {
 }
 
 void recordFrame(VkCommandBuffer cmd, GraphicsPipelines pipelines,
-                 const std::vector<RenderObject> &objects,
+                 std::span<const RenderObject> objects,
                  const SceneDescriptors &descriptors, uint32_t frameIndex,
                  VkImage image, VkImageView view, VkImage depthImage,
                  VkImageView depthView, const VkExtent2D &extent,
@@ -117,11 +117,11 @@ void recordFrame(VkCommandBuffer cmd, GraphicsPipelines pipelines,
                     pipelines.opaque.pipeline);
 
   for (const RenderObject &object : objects) {
-    if (object.material.pipeline != GraphicsPipelineType::Opaque) {
+    if (object.material.kind != MaterialKind::Opaque) {
       continue;
     }
 
-    uint32_t texIdx = object.material.textureIndex;
+    uint32_t texIdx = object.material.texture.index;
     if (texIdx >= descriptors.textureCount)
       texIdx = 0;
     VkDescriptorSet set = descriptors.get(frameIndex, texIdx);
@@ -148,11 +148,11 @@ void recordFrame(VkCommandBuffer cmd, GraphicsPipelines pipelines,
                     pipelines.transparent.pipeline);
 
   for (const RenderObject &object : objects) {
-    if (object.material.pipeline != GraphicsPipelineType::Transparent) {
+    if (object.material.kind != MaterialKind::Transparent) {
       continue;
     }
 
-    uint32_t texIdx = object.material.textureIndex;
+    uint32_t texIdx = object.material.texture.index;
     if (texIdx >= descriptors.textureCount)
       texIdx = 0;
     VkDescriptorSet set = descriptors.get(frameIndex, texIdx);

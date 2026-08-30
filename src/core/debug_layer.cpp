@@ -1,6 +1,7 @@
 #include "debug_layer.hpp"
 
-#include "src/render/camera.hpp"
+#include "src/asset/store.hpp"
+#include "src/scene/scene.hpp"
 
 #include <imgui.h>
 #include <imgui_impl_glfw.h>
@@ -13,10 +14,13 @@
 static float radians(float deg) { return deg * (LDG_PI / 180.0f); }
 static float degrees(float rad) { return rad * (180.0f / LDG_PI); }
 
-DebugLayer::DebugLayer(GLFWwindow &window, Renderer &renderer)
-    : m_window(window), m_renderer(renderer) {
+DebugLayer::DebugLayer(GLFWwindow &window, Renderer &renderer,
+                       AssetStore &assets, Scene &scene)
+    : m_window(window), m_renderer(renderer), m_assets(assets), m_scene(scene) {
   syncYawPitchFromCamera();
 }
+
+GameObject *DebugLayer::camera() { return m_scene.mainCamera(); }
 
 DebugLayer::~DebugLayer() {
   if (m_initialized) {
@@ -83,26 +87,42 @@ void DebugLayer::onDetach() {
 }
 
 void DebugLayer::syncYawPitchFromCamera() {
-  Camera &cam = m_renderer.getCamera();
-  Vec3 forward = (cam.center - cam.eye).normalize();
+  GameObject *cameraObject = camera();
+  if (cameraObject == nullptr)
+    return;
+  Vec3 forward =
+      cameraObject->transform.rotation.rotate(Vec3{0.0f, 0.0f, -1.0f});
   if (forward.length() < 0.001f)
     return;
   m_yaw = degrees(std::atan2(forward.z, forward.x));
   m_pitch = degrees(std::asin(std::clamp(forward.y, -1.0f, 1.0f)));
 }
 
+void DebugLayer::applyYawPitch(Transform &transform) {
+  float yawRad = radians(m_yaw);
+  float pitchRad = radians(m_pitch);
+  float yawTerm = -yawRad - LDG_PI / 2.0f;
+  Quat yawQ = Quat::fromAxisAngle(Vec3{0.0f, 1.0f, 0.0f}, yawTerm);
+  Quat pitchQ = Quat::fromAxisAngle(Vec3{1.0f, 0.0f, 0.0f}, pitchRad);
+  transform.rotation = yawQ * pitchQ;
+}
+
 void DebugLayer::updateFreeFly(float dt) {
   if (!m_freeFlyEnabled)
     return;
 
-  ImGuiIO &io = ImGui::GetIO();
+  GameObject *cameraObject = camera();
+  if (cameraObject == nullptr)
+    return;
 
-  Camera &cam = m_renderer.getCamera();
+  Transform &transform = cameraObject->transform;
+
+  ImGuiIO &io = ImGui::GetIO();
 
   bool wantKeyboard = io.WantCaptureKeyboard;
   bool wantMouse = io.WantCaptureMouse;
 
-  Vec3 forward = (cam.center - cam.eye).normalize();
+  Vec3 forward = transform.rotation.rotate(Vec3{0.0f, 0.0f, -1.0f});
   if (forward.length() < 0.001f)
     forward = Vec3{0, 0, -1};
   Vec3 worldUp{0, 1, 0};
@@ -140,8 +160,7 @@ void DebugLayer::updateFreeFly(float dt) {
   }
 
   if (delta.x != 0.0f || delta.y != 0.0f || delta.z != 0.0f) {
-    cam.eye = cam.eye + delta;
-    cam.center = cam.center + delta;
+    transform.position = transform.position + delta;
   }
 
   bool rightHeld =
@@ -168,17 +187,7 @@ void DebugLayer::updateFreeFly(float dt) {
       m_pitch -= static_cast<float>(dy) * m_lookSpeed;
       m_pitch = std::clamp(m_pitch, -89.0f, 89.0f);
 
-      float dist = (cam.center - cam.eye).length();
-      if (dist < 0.001f)
-        dist = 2.5f;
-      float yawRad = radians(m_yaw);
-      float pitchRad = radians(m_pitch);
-      Vec3 newForward;
-      newForward.x = std::cos(yawRad) * std::cos(pitchRad);
-      newForward.y = std::sin(pitchRad);
-      newForward.z = std::sin(yawRad) * std::cos(pitchRad);
-      newForward = newForward.normalize();
-      cam.center = cam.eye + newForward * dist;
+      applyYawPitch(transform);
     }
   } else {
     m_firstMouse = true;
@@ -186,7 +195,7 @@ void DebugLayer::updateFreeFly(float dt) {
 }
 
 void DebugLayer::buildUI(float dt) {
-  Camera &cam = m_renderer.getCamera();
+  GameObject *cameraObject = camera();
 
   ImGui::Begin("Debug Menu", &m_visible);
 
@@ -196,41 +205,41 @@ void DebugLayer::buildUI(float dt) {
               m_renderer.getSwapchain().extent.height);
   ImGui::Separator();
 
-  if (ImGui::CollapsingHeader("Camera", ImGuiTreeNodeFlags_DefaultOpen)) {
-    float eye[3] = {cam.eye.x, cam.eye.y, cam.eye.z};
+  if (cameraObject != nullptr &&
+      ImGui::CollapsingHeader("Camera", ImGuiTreeNodeFlags_DefaultOpen)) {
+    Transform &transform = cameraObject->transform;
+    CameraParams &params = *cameraObject->camera;
+
+    float eye[3] = {transform.position.x, transform.position.y,
+                    transform.position.z};
     if (ImGui::DragFloat3("Eye", eye, 0.05f)) {
-      cam.eye = Vec3{eye[0], eye[1], eye[2]};
-      syncYawPitchFromCamera();
-    }
-    float center[3] = {cam.center.x, cam.center.y, cam.center.z};
-    if (ImGui::DragFloat3("Center", center, 0.05f)) {
-      cam.center = Vec3{center[0], center[1], center[2]};
-      syncYawPitchFromCamera();
-    }
-    float up[3] = {cam.up.x, cam.up.y, cam.up.z};
-    if (ImGui::DragFloat3("Up", up, 0.02f, -1.0f, 1.0f)) {
-      Vec3 newUp{up[0], up[1], up[2]};
-      if (newUp.length() > 0.001f) {
-        cam.up = newUp.normalize();
-      }
+      transform.position = Vec3{eye[0], eye[1], eye[2]};
     }
 
     ImGui::Separator();
-    ImGui::SliderFloat("FOV Y", &cam.fovY, 30.0f, 120.0f);
-    ImGui::SliderFloat("Near", &cam.nearZ, 0.01f, 2.0f);
-    ImGui::SliderFloat("Far", &cam.farZ, 5.0f, 100.0f);
+    ImGui::SliderFloat("FOV Y", &params.fovY, 30.0f, 120.0f);
+    ImGui::SliderFloat("Near", &params.nearZ, 0.01f, 2.0f);
+    ImGui::SliderFloat("Far", &params.farZ, 5.0f, 100.0f);
 
-    float dist = (cam.center - cam.eye).length();
-    ImGui::Text("Distance: %.2f  Yaw: %.1f  Pitch: %.1f", dist, m_yaw, m_pitch);
+    ImGui::Text("Yaw: %.1f  Pitch: %.1f", m_yaw, m_pitch);
 
     if (ImGui::Button("Reset Camera")) {
-      cam.reset();
-      syncYawPitchFromCamera();
+      transform.position = Vec3{0.0f, 1.0f, 1.0f};
+      params = CameraParams{};
+      m_yaw = -90.0f;
+      m_pitch = -45.0f;
+      applyYawPitch(transform);
     }
     ImGui::SameLine();
     if (ImGui::Button("Look At Origin")) {
-      cam.center = Vec3{0, 0, 0};
-      syncYawPitchFromCamera();
+      Vec3 to = Vec3{0, 0, 0} - transform.position;
+      if (to.length() > 0.001f) {
+        Vec3 dir = to.normalize();
+        m_yaw = degrees(std::atan2(dir.z, dir.x));
+        m_pitch = std::clamp(degrees(std::asin(std::clamp(dir.y, -1.0f, 1.0f))),
+                             -89.0f, 89.0f);
+        applyYawPitch(transform);
+      }
     }
   }
 
@@ -241,20 +250,30 @@ void DebugLayer::buildUI(float dt) {
   }
 
   if (ImGui::CollapsingHeader("Lighting", ImGuiTreeNodeFlags_DefaultOpen)) {
-    Light &light = m_renderer.getLight();
-    float lp[3] = {light.pos.x, light.pos.y, light.pos.z};
-    if (ImGui::DragFloat3("Light Pos", lp, 0.1f)) {
-      light.pos = Vec3{lp[0], lp[1], lp[2]};
-    }
+    GameObject *lightObject = m_scene.mainLight();
+    if (lightObject == nullptr) {
+      ImGui::Text("No light in scene");
+    } else {
+      float lp[3] = {lightObject->transform.position.x,
+                     lightObject->transform.position.y,
+                     lightObject->transform.position.z};
+      if (ImGui::DragFloat3("Light Pos", lp, 0.1f)) {
+        lightObject->transform.position = Vec3{lp[0], lp[1], lp[2]};
+      }
 
-    bool show = light.showGizmo;
-    if (ImGui::Checkbox("Show Light Gizmo", &show)) {
-      light.showGizmo = show;
-    }
-    if (show) {
-      float sz = light.gizmoSize;
-      if (ImGui::SliderFloat("Gizmo Size", &sz, 0.05f, 1.0f)) {
-        light.gizmoSize = sz;
+      bool show = lightObject->renderer.has_value();
+      if (ImGui::Checkbox("Show Light Gizmo", &show)) {
+        if (show) {
+          lightObject->renderer = ModelRenderer{m_assets.gizmoModel()};
+        } else {
+          lightObject->renderer = std::nullopt;
+        }
+      }
+      if (show) {
+        float sz = lightObject->transform.scale.x;
+        if (ImGui::SliderFloat("Gizmo Size", &sz, 0.05f, 1.0f)) {
+          lightObject->transform.scale = Vec3{sz, sz, sz};
+        }
       }
     }
   }

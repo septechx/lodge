@@ -1,10 +1,8 @@
 #include "load.hpp"
 
+#include "src/asset/store.hpp"
 #include "src/math/Quat.hpp"
 #include "src/math/Vec2.hpp"
-#include "src/render/allocator.hpp"
-#include "src/render/buffers.hpp"
-#include "src/render/pipelines/pipeline.hpp"
 #include "src/render/vertex.hpp"
 #include "src/utils.hpp"
 
@@ -261,10 +259,9 @@ static Vec3 readNormal(const tinygltf3::Model &model, int32_t accIndex,
   return {0.0f, 0.0f, 1.0f};
 }
 
-static std::vector<Texture> loadGltfTextures(const Device &dev,
-                                             const tinygltf3::Model &model) {
-  std::vector<Texture> textures;
-  textures.reserve(model->textures_count);
+static uint32_t loadGltfTextures(AssetStore &store,
+                                 const tinygltf3::Model &model) {
+  uint32_t base = static_cast<uint32_t>(store.textures().size());
 
   for (uint32_t ti = 0; ti < model->textures_count; ++ti) {
     const tg3_texture *tex = &model->textures[ti];
@@ -278,7 +275,7 @@ static std::vector<Texture> loadGltfTextures(const Device &dev,
         static_cast<uint32_t>(tex->source) >= model->images_count) {
       spdlog::warn("texture {} has invalid source {}, using white", ti,
                    tex->source);
-      textures.push_back(createWhiteTexture(dev));
+      store.addTexture(createWhiteTexture(store.device()));
       continue;
     }
 
@@ -291,23 +288,23 @@ static std::vector<Texture> loadGltfTextures(const Device &dev,
       const uint8_t *data = buf->data.data + bv->byte_offset;
       size_t size = bv->byte_length;
 
-      Texture t = createTextureFromMemory(dev, data, size, sampler);
+      Texture t = createTextureFromMemory(store.device(), data, size, sampler);
       spdlog::debug("loaded glTF texture {} from image {} ({} bytes) -> {}x{}",
                     ti, tex->source, size, t.width, t.height);
-      textures.push_back(t);
+      store.addTexture(t);
     } else {
       spdlog::warn("texture {} image {} has no buffer view, using white", ti,
                    tex->source);
-      textures.push_back(createWhiteTexture(dev));
+      store.addTexture(createWhiteTexture(store.device()));
     }
   }
 
-  return textures;
+  return base;
 }
 
-static std::vector<RenderObject>
-buildObjects(const Device &dev, const tinygltf3::Model &model,
-             const std::vector<Texture> &textures, uint32_t fallbackTex) {
+static std::vector<ModelPart> buildParts(AssetStore &store,
+                                         const tinygltf3::Model &model,
+                                         uint32_t textureBase) {
   int32_t sceneIdx = model->default_scene;
   if (sceneIdx < 0 && model->scenes_count > 0)
     sceneIdx = 0;
@@ -315,7 +312,8 @@ buildObjects(const Device &dev, const tinygltf3::Model &model,
              static_cast<uint32_t>(sceneIdx) < model->scenes_count);
   const tg3_scene *scene = &model->scenes[sceneIdx];
 
-  std::vector<RenderObject> objects;
+  std::vector<ModelPart> parts;
+  uint32_t modelTextureCount = model->textures_count;
 
   struct Frame {
     int32_t node;
@@ -377,11 +375,11 @@ buildObjects(const Device &dev, const tinygltf3::Model &model,
           exit(1);
         }
 
-        AllocatedBuffer vbuf = createVertexBuffer(
-            dev, vertices.data(), vertices.size() * sizeof(Vertex));
-        AllocatedBuffer ibuf = createIndexBuffer(dev, idxData, idxBytes);
+        MeshHandle meshHandle = store.createMesh(
+            vertices.data(), vertices.size() * sizeof(Vertex), idxData,
+            idxBytes, static_cast<uint32_t>(idxAcc->count), idxType);
 
-        uint32_t texIndex = fallbackTex;
+        uint32_t texIndex = textureBase;
         float baseColorFactor[4] = {1.0f, 1.0f, 1.0f, 1.0f};
         bool isBlend = false;
         bool doubleSided = false;
@@ -396,12 +394,13 @@ buildObjects(const Device &dev, const tinygltf3::Model &model,
                 mat->pbr_metallic_roughness.base_color_factor[c]);
 
           int texIdx = mat->pbr_metallic_roughness.base_color_texture.index;
-          if (texIdx >= 0 && static_cast<uint32_t>(texIdx) < textures.size()) {
-            texIndex = static_cast<uint32_t>(texIdx);
+          if (texIdx >= 0 &&
+              static_cast<uint32_t>(texIdx) < modelTextureCount) {
+            texIndex = textureBase + static_cast<uint32_t>(texIdx);
           } else if (texIdx >= 0) {
             spdlog::warn("material {} baseColorTexture {} out of range, using "
-                         "fallback {} ",
-                         prim->material, texIdx, fallbackTex);
+                         "white fallback",
+                         prim->material, texIdx);
           }
 
           bool alphaModeBlend = mat->alpha_mode.data != nullptr &&
@@ -413,23 +412,17 @@ buildObjects(const Device &dev, const tinygltf3::Model &model,
           spdlog::warn("primitive material {} out of range", prim->material);
         }
 
-        Material mat{
-            .textureIndex = texIndex,
+        ModelPart part;
+        part.mesh = meshHandle;
+        part.material = Material{
+            .texture = TextureHandle{texIndex},
             .baseColorFactor = {baseColorFactor[0], baseColorFactor[1],
                                 baseColorFactor[2], baseColorFactor[3]},
             .doubleSided = doubleSided,
-            .pipeline = isBlend ? GraphicsPipelineType::Transparent
-                                : GraphicsPipelineType::Opaque,
+            .kind = isBlend ? MaterialKind::Transparent : MaterialKind::Opaque,
         };
-        RenderObject obj{
-            .worldMat = world,
-            .vbuf = vbuf,
-            .ibuf = ibuf,
-            .indexCount = static_cast<uint32_t>(idxAcc->count),
-            .indexType = idxType,
-            .material = mat,
-        };
-        objects.push_back(obj);
+        part.local = world;
+        parts.push_back(part);
       }
     }
 
@@ -439,10 +432,10 @@ buildObjects(const Device &dev, const tinygltf3::Model &model,
     }
   }
 
-  return objects;
+  return parts;
 }
 
-LoadedModel loadModel(const Device &dev, std::filesystem::path path) {
+ModelHandle loadModel(AssetStore &store, std::filesystem::path path) {
   tinygltf3::ErrorStack errors;
   tinygltf3::Model model;
 
@@ -460,44 +453,11 @@ LoadedModel loadModel(const Device &dev, std::filesystem::path path) {
       model->meshes_count, model->textures_count, model->images_count,
       model->materials_count);
 
-  std::vector<Texture> textures = loadGltfTextures(dev, model);
+  uint32_t textureBase = loadGltfTextures(store, model);
 
-  uint32_t fallbackTex = 0;
-  if (textures.empty()) {
-    spdlog::warn("no glTF textures found, creating white fallback");
-    Texture white = createWhiteTexture(dev);
-    textures.push_back(white);
-    fallbackTex = 0;
-  } else {
-    bool needFallback = false;
-    for (uint32_t mi = 0; mi < model->meshes_count; ++mi) {
-      const tg3_mesh *mesh = &model->meshes[mi];
-      for (uint32_t pi = 0; pi < mesh->primitives_count; ++pi) {
-        const tg3_primitive *prim = &mesh->primitives[pi];
-        if (prim->material < 0) {
-          needFallback = true;
-        } else if (static_cast<uint32_t>(prim->material) <
-                   model->materials_count) {
-          const tg3_material *mat = &model->materials[prim->material];
-          if (mat->pbr_metallic_roughness.base_color_texture.index < 0)
-            needFallback = true;
-        }
-      }
-    }
-    if (needFallback) {
-      Texture white = createWhiteTexture(dev);
-      fallbackTex = static_cast<uint32_t>(textures.size());
-      textures.push_back(white);
-      spdlog::warn("added white fallback texture at index {}", fallbackTex);
-    } else {
-      fallbackTex = 0;
-    }
-  }
+  std::vector<ModelPart> parts = buildParts(store, model, textureBase);
+  spdlog::debug("built model with {} parts and {} textures from glTF",
+                parts.size(), model->textures_count);
 
-  std::vector<RenderObject> objects =
-      buildObjects(dev, model, textures, fallbackTex);
-  spdlog::debug("built {} objects with {} textures from glTF", objects.size(),
-                textures.size());
-
-  return {std::move(objects), std::move(textures)};
+  return store.addModel(Model{std::move(parts)});
 }

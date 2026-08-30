@@ -28,6 +28,8 @@ struct Quat {
     return qx * qy * qz;
   }
 
+  static constexpr Quat fromMat3(const Mat3 &m);
+
   constexpr float length() const {
     return std::sqrt(w * w + x * x + y * y + z * z);
   }
@@ -56,6 +58,29 @@ struct Quat {
 };
 
 inline constexpr Quat Quat::IDENTITY{1, 0, 0, 0};
+
+constexpr Quat Quat::fromMat3(const Mat3 &m) {
+  float trace = m(0, 0) + m(1, 1) + m(2, 2);
+  Quat q;
+  if (trace > 0.0f) {
+    float s = std::sqrt(trace + 1.0f) * 2.0f;
+    q = {s / 4.0f, (m(2, 1) - m(1, 2)) / s, (m(0, 2) - m(2, 0)) / s,
+         (m(1, 0) - m(0, 1)) / s};
+  } else if (m(0, 0) > m(1, 1) && m(0, 0) > m(2, 2)) {
+    float s = std::sqrt(1.0f + m(0, 0) - m(1, 1) - m(2, 2)) * 2.0f;
+    q = {(m(2, 1) - m(1, 2)) / s, s / 4.0f, (m(0, 1) + m(1, 0)) / s,
+         (m(0, 2) + m(2, 0)) / s};
+  } else if (m(1, 1) > m(2, 2)) {
+    float s = std::sqrt(1.0f + m(1, 1) - m(0, 0) - m(2, 2)) * 2.0f;
+    q = {(m(0, 2) - m(2, 0)) / s, (m(0, 1) + m(1, 0)) / s, s / 4.0f,
+         (m(1, 2) + m(2, 1)) / s};
+  } else {
+    float s = std::sqrt(1.0f + m(2, 2) - m(0, 0) - m(1, 1)) * 2.0f;
+    q = {(m(1, 0) - m(0, 1)) / s, (m(0, 2) + m(2, 0)) / s,
+         (m(1, 2) + m(2, 1)) / s, s / 4.0f};
+  }
+  return q.normalize();
+}
 
 constexpr Mat4 Mat4::fromQuat(Quat q) {
   Quat nq = q.normalize();

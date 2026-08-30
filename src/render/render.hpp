@@ -7,7 +7,7 @@
 #include <imgui.h>
 #include <vulkan/vulkan.h>
 
-#include <vector>
+#include <span>
 
 struct CmdBundle {
   VkCommandPool pool;
@@ -17,7 +17,7 @@ struct CmdBundle {
 CmdBundle createCmd(VkDevice device, uint32_t queueFamily);
 
 void recordFrame(VkCommandBuffer cmd, GraphicsPipelines pipelines,
-                 const std::vector<RenderObject> &objects,
+                 std::span<const RenderObject> objects,
                  const SceneDescriptors &descriptors, uint32_t frameIndex,
                  VkImage image, VkImageView view, VkImage depthImage,
                  VkImageView depthView, const VkExtent2D &extent,
