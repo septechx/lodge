@@ -14,7 +14,9 @@ AllocatedBuffer createIndexBuffer(Device device, const void *data,
                                   VkDeviceSize size);
 
 struct CameraData {
-  Mat4 viewproj;
+  Mat4 viewProj;
+  Vec3 viewPos;
+  float _pad0;
 };
 
 struct CameraUniformBuffer {
@@ -30,8 +32,6 @@ struct LightData {
   float _pad0;
   Vec3 lightColor;
   float _pad1;
-  Vec3 viewPos;
-  float _pad2;
 };
 
 struct PushConstants {

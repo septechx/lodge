@@ -175,12 +175,14 @@ void Renderer::drawFrame(const FrameScene &frame) {
   Vec3 up = camera.rotation.rotate(Vec3{0.0f, 1.0f, 0.0f});
   Mat4 view = Mat4::lookAt(camera.position, camera.position + forward, up);
   CameraData cameraData{
-      Mat4::perspective(camera.fovY, aspect, camera.nearZ, camera.farZ) * view};
+      .viewProj =
+          Mat4::perspective(camera.fovY, aspect, camera.nearZ, camera.farZ) *
+          view,
+      .viewPos = camera.position};
   memcpy(m_cameraUniforms[m_frame].mapped, &cameraData, sizeof(CameraData));
 
   FrameLight light = frame.lights.front();
-  LightData lightData{
-      .lightPos = light.pos, .lightColor = light.color, .viewPos = camera.position};
+  LightData lightData{.lightPos = light.pos, .lightColor = light.color};
   memcpy(m_lights[m_frame].mapped, &lightData, sizeof(LightData));
 
   ImDrawData *drawData = nullptr;
