@@ -1,6 +1,5 @@
 #include "render.hpp"
 
-#include "src/math/Mat4.hpp"
 #include "src/render/pipelines/pipeline.hpp"
 #include "src/render/utils.hpp"
 
@@ -116,7 +115,8 @@ void recordFrame(VkCommandBuffer cmd, GraphicsPipelines pipelines,
   vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS,
                     pipelines.opaque.pipeline);
 
-  for (const RenderObject &object : objects) {
+  for (size_t i = 0; i < objects.size(); ++i) {
+    const RenderObject &object = objects[i];
     if (object.material.kind != MaterialKind::Opaque) {
       continue;
     }
@@ -131,23 +131,20 @@ void recordFrame(VkCommandBuffer cmd, GraphicsPipelines pipelines,
     VkDeviceSize offset = 0;
     vkCmdBindVertexBuffers(cmd, 0, 1, &object.vbuf.buffer, &offset);
     vkCmdBindIndexBuffer(cmd, object.ibuf.buffer, 0, object.indexType);
-    Mat3 normal = object.worldMat.normalMatrix();
-    PushConstants pc{
-        .model = object.worldMat,
-        .normal0 = {normal[0], normal[1], normal[2], 0},
-        .normal1 = {normal[3], normal[4], normal[5], 0},
-        .normal2 = {normal[6], normal[7], normal[8], 0},
-        .baseColor = object.material.baseColorFactor,
-    };
+
+    PushConstants pc{.model = object.worldMat,
+                     .materialIdx = static_cast<uint32_t>(i)};
     vkCmdPushConstants(cmd, pipelines.opaque.layout, VK_SHADER_STAGE_VERTEX_BIT,
                        0, sizeof(PushConstants), &pc);
+
     vkCmdDrawIndexed(cmd, object.indexCount, 1, 0, 0, 0);
   }
 
   vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS,
                     pipelines.transparent.pipeline);
 
-  for (const RenderObject &object : objects) {
+  for (size_t i = 0; i < objects.size(); ++i) {
+    const RenderObject &object = objects[i];
     if (object.material.kind != MaterialKind::Transparent) {
       continue;
     }
@@ -163,17 +160,13 @@ void recordFrame(VkCommandBuffer cmd, GraphicsPipelines pipelines,
     VkDeviceSize offset = 0;
     vkCmdBindVertexBuffers(cmd, 0, 1, &object.vbuf.buffer, &offset);
     vkCmdBindIndexBuffer(cmd, object.ibuf.buffer, 0, object.indexType);
-    Mat3 normal = object.worldMat.normalMatrix();
-    PushConstants pc{
-        .model = object.worldMat,
-        .normal0 = {normal[0], normal[1], normal[2], 0},
-        .normal1 = {normal[3], normal[4], normal[5], 0},
-        .normal2 = {normal[6], normal[7], normal[8], 0},
-        .baseColor = object.material.baseColorFactor,
-    };
+
+    PushConstants pc{.model = object.worldMat,
+                     .materialIdx = static_cast<uint32_t>(i)};
     vkCmdPushConstants(cmd, pipelines.transparent.layout,
                        VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(PushConstants),
                        &pc);
+
     vkCmdDrawIndexed(cmd, object.indexCount, 1, 0, 0, 0);
   }
 

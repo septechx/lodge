@@ -1,6 +1,7 @@
 #pragma once
 
 #include "src/asset/store.hpp"
+#include "src/render/buffers.hpp"
 #include "src/render/pipelines/pipeline.hpp"
 #include "src/render/render.hpp"
 #include "src/render/swapchain.hpp"
@@ -43,6 +44,7 @@ private:
   bool m_sceneInitialized = false;
   CameraUniformBuffer m_cameraUniforms[MAX_FRAMES_IN_FLIGHT];
   LightUniformBuffer m_lights[MAX_FRAMES_IN_FLIGHT];
+  MaterialUniformBuffer m_materials[MAX_FRAMES_IN_FLIGHT];
   SceneDescriptors m_desc;
   GraphicsPipelines m_pipelines;
   CmdBundle m_cmd[MAX_FRAMES_IN_FLIGHT];

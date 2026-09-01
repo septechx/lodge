@@ -60,6 +60,19 @@ LightUniformBuffer createLightUniformBuffer(Device device) {
                             static_cast<LightData *>(mapped)};
 }
 
+MaterialUniformBuffer createMaterialUniformBuffer(Device device) {
+  AllocatedBuffer buf = createBuffer(device, sizeof(MaterialsBlock),
+                                     VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT,
+                                     VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT |
+                                         VK_MEMORY_PROPERTY_HOST_COHERENT_BIT);
+  void *mapped = nullptr;
+  CHECK_VK(vkMapMemory(device.device, buf.memory, 0, sizeof(MaterialsBlock), 0,
+                       &mapped),
+           "map material uniform");
+  return MaterialUniformBuffer{buf.buffer, buf.memory,
+                               static_cast<MaterialsBlock *>(mapped)};
+}
+
 DepthBuffer createDepthBuffer(Device device, VkFormat format, uint32_t width,
                               uint32_t height) {
   AllocatedImage img = createImage(device, width, height, format,
@@ -82,10 +95,11 @@ DepthBuffer createDepthBuffer(Device device, VkFormat format, uint32_t width,
 SceneDescriptors createSceneDescriptors(VkDevice device,
                                         const std::vector<Texture> &textures,
                                         CameraUniformBuffer *cameras,
-                                        LightUniformBuffer *lights) {
+                                        LightUniformBuffer *lights,
+                                        MaterialUniformBuffer *materials) {
   LDG_ASSERT(!textures.empty());
 
-  VkDescriptorSetLayoutBinding bindings[3] = {
+  VkDescriptorSetLayoutBinding bindings[4] = {
       {.binding = 0,
        .descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
        .descriptorCount = 1,
@@ -98,10 +112,13 @@ SceneDescriptors createSceneDescriptors(VkDevice device,
        .descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,
        .descriptorCount = 1,
        .stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT},
-  };
+      {.binding = 3,
+       .descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,
+       .descriptorCount = 1,
+       .stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT}};
   VkDescriptorSetLayoutCreateInfo lci = {
       .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO,
-      .bindingCount = 3,
+      .bindingCount = 4,
       .pBindings = bindings,
   };
   VkDescriptorSetLayout setLayout;
@@ -115,7 +132,7 @@ SceneDescriptors createSceneDescriptors(VkDevice device,
       {.type = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
        .descriptorCount = setCount},
       {.type = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,
-       .descriptorCount = setCount * 2},
+       .descriptorCount = setCount * 3},
   };
   VkDescriptorPoolCreateInfo pci = {
       .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO,
@@ -155,7 +172,12 @@ SceneDescriptors createSceneDescriptors(VkDevice device,
           .offset = 0,
           .range = sizeof(CameraData),
       };
-      VkWriteDescriptorSet writes[3] = {
+      VkDescriptorBufferInfo materialInfo = {
+          .buffer = materials[f].buffer,
+          .offset = 0,
+          .range = sizeof(MaterialsBlock),
+      };
+      VkWriteDescriptorSet writes[4] = {
           {.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
            .dstSet = sets[idx],
            .dstBinding = 0,
@@ -177,8 +199,16 @@ SceneDescriptors createSceneDescriptors(VkDevice device,
            .descriptorCount = 1,
            .descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,
            .pBufferInfo = &lightInfo},
+          {.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
+           .dstSet = sets[idx],
+           .dstBinding = 3,
+           .dstArrayElement = 0,
+           .descriptorCount = 1,
+           .descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,
+           .pBufferInfo = &materialInfo},
+
       };
-      vkUpdateDescriptorSets(device, 3, writes, 0, nullptr);
+      vkUpdateDescriptorSets(device, 4, writes, 0, nullptr);
     }
   }
 

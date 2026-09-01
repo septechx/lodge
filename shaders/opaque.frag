@@ -1,22 +1,30 @@
 #version 450
 
+struct MaterialData {
+    vec4 baseColor;
+    vec4 _pad;
+};
+
 layout(binding = 0) uniform sampler2D texSampler;
 layout(binding = 2) uniform LightData {
     vec3 lightPos;
     vec3 lightColor;
 } lightData;
+layout(binding = 3) uniform Materials {
+    MaterialData data[512];
+} materials;
 
 layout(location = 0) in vec2 fragUV;
 layout(location = 1) in vec3 fragNormal;
 layout(location = 2) in vec3 fragPos;
-layout(location = 3) in vec4 fragColor;
-layout(location = 4) in vec3 viewPos;
+layout(location = 3) flat in vec3 viewPos;
+layout(location = 4) flat in uint materialIdx;
 
 layout(location = 0) out vec4 outColor;
 
 void main() {
     vec4 sampled = texture(texSampler, fragUV);
-    vec4 base = sampled * fragColor;
+    vec4 base = sampled * materials.data[materialIdx].baseColor;
 
     if (base.a < 0.5) discard;
 

@@ -34,14 +34,6 @@ struct LightData {
   float _pad1;
 };
 
-struct PushConstants {
-  Mat4 model;
-  Vec4 normal0;
-  Vec4 normal1;
-  Vec4 normal2;
-  Vec4 baseColor;
-};
-
 struct LightUniformBuffer {
   VkBuffer buffer;
   VkDeviceMemory memory;
@@ -49,6 +41,38 @@ struct LightUniformBuffer {
 };
 
 LightUniformBuffer createLightUniformBuffer(Device device);
+
+#define MAX_MATERIALS 512
+
+struct MaterialData {
+  Vec4 baseColor;
+
+  // Maybe move this to transparent-specific descriptor?
+  float thickness;
+  float ior;
+
+  float _pad[2];
+};
+
+struct MaterialsBlock {
+  MaterialData data[MAX_MATERIALS];
+};
+
+struct MaterialUniformBuffer {
+  VkBuffer buffer;
+  VkDeviceMemory memory;
+  MaterialsBlock *mapped;
+};
+
+MaterialUniformBuffer createMaterialUniformBuffer(Device device);
+
+struct PushConstants {
+  Mat4 model;
+  uint32_t materialIdx;
+  uint32_t _pad0;
+  uint32_t _pad1;
+  uint32_t _pad2;
+};
 
 struct DepthBuffer {
   VkImage image;
@@ -74,4 +98,5 @@ struct SceneDescriptors {
 SceneDescriptors createSceneDescriptors(VkDevice device,
                                         const std::vector<Texture> &textures,
                                         CameraUniformBuffer *cameras,
-                                        LightUniformBuffer *lights);
+                                        LightUniformBuffer *lights,
+                                        MaterialUniformBuffer *materials);

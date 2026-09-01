@@ -79,14 +79,14 @@ Renderer::Renderer(GLFWwindow &window) : m_window(window) {
 void Renderer::initScene(const AssetStore &assets) {
   LDG_ASSERT(!m_sceneInitialized);
 
-  for (int i = 0; i < MAX_FRAMES_IN_FLIGHT; ++i)
+  for (int i = 0; i < MAX_FRAMES_IN_FLIGHT; ++i) {
     m_cameraUniforms[i] = createCameraUniformBuffer(m_dev);
-
-  for (int i = 0; i < MAX_FRAMES_IN_FLIGHT; ++i)
     m_lights[i] = createLightUniformBuffer(m_dev);
+    m_materials[i] = createMaterialUniformBuffer(m_dev);
+  }
 
   m_desc = createSceneDescriptors(m_dev.device, assets.textures(),
-                                  m_cameraUniforms, m_lights);
+                                  m_cameraUniforms, m_lights, m_materials);
 
   m_pipelines = {
       .opaque = createOpaquePipeline(m_dev.device, m_sc.format, m_depthFormat,
@@ -185,6 +185,18 @@ void Renderer::drawFrame(const FrameScene &frame) {
   LightData lightData{.lightPos = light.pos, .lightColor = light.color};
   memcpy(m_lights[m_frame].mapped, &lightData, sizeof(LightData));
 
+  // TODO: Dedup materials
+  LDG_ASSERT(frame.objects.size() <= MAX_MATERIALS);
+  for (size_t i = 0; i < frame.objects.size(); ++i) {
+    const Material &mat = frame.objects[i].material;
+    MaterialData &dst = m_materials[m_frame].mapped->data[i];
+    if (mat.kind == MaterialKind::Transparent) {
+      dst.thickness = 0.09f;
+      dst.ior = 1.52f;
+    }
+    dst.baseColor = mat.baseColorFactor;
+  }
+
   ImDrawData *drawData = nullptr;
   if (ImGui::GetCurrentContext() != nullptr) {
     drawData = ImGui::GetDrawData();
@@ -257,12 +269,14 @@ Renderer::~Renderer() {
       vkUnmapMemory(device, m_cameraUniforms[i].memory);
       vkDestroyBuffer(device, m_cameraUniforms[i].buffer, nullptr);
       vkFreeMemory(device, m_cameraUniforms[i].memory, nullptr);
-    }
 
-    for (int i = 0; i < MAX_FRAMES_IN_FLIGHT; ++i) {
       vkUnmapMemory(device, m_lights[i].memory);
       vkDestroyBuffer(device, m_lights[i].buffer, nullptr);
       vkFreeMemory(device, m_lights[i].memory, nullptr);
+
+      vkUnmapMemory(device, m_materials[i].memory);
+      vkDestroyBuffer(device, m_materials[i].buffer, nullptr);
+      vkFreeMemory(device, m_materials[i].memory, nullptr);
     }
   }
 

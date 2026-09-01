@@ -2,8 +2,7 @@
 
 layout(push_constant) uniform PushConstants {
     mat4 model;
-    mat3 normal;
-    vec4 baseColor;
+    uint materialIdx;
 } pc;
 layout(binding = 1) uniform CameraData {
     mat4 viewProj;
@@ -17,15 +16,16 @@ layout(location = 2) in vec3 inNormal;
 layout(location = 0) out vec2 fragUV;
 layout(location = 1) out vec3 fragNormal;
 layout(location = 2) out vec3 fragPos;
-layout(location = 3) out vec4 fragColor;
-layout(location = 4) out vec3 viewPos;
+layout(location = 3) flat out vec3 viewPos;
+layout(location = 4) flat out uint materialIdx;
 
 void main() {
     fragUV = inUv;
-    fragColor = pc.baseColor;
     viewPos = camera.viewPos;
+    materialIdx = pc.materialIdx;
 
-    fragNormal = normalize(pc.normal * inNormal);
+    mat3 normalMat = transpose(inverse(mat3(pc.model)));
+    fragNormal = normalize(normalMat * inNormal);
 
     fragPos = vec3(pc.model * vec4(inPos, 1.0));
 
