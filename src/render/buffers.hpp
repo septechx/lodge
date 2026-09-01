@@ -109,3 +109,6 @@ createSceneDescriptors(VkDevice device, const std::vector<Texture> &textures,
                        CameraUniformBuffer *cameras, LightUniformBuffer *lights,
                        MaterialUniformBuffer *materials, VkSampler sceneSampler,
                        VkImageView sceneView);
+
+void updateSceneGrabDescriptors(VkDevice device, const SceneDescriptors &descriptors,
+                                VkSampler sceneSampler, VkImageView sceneView);

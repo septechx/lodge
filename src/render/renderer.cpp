@@ -124,6 +124,14 @@ void Renderer::onResize(uint32_t width, uint32_t height) {
 void Renderer::destroySwapchainResources() {
   const VkDevice device = m_dev.device;
 
+  vkDestroyImageView(device, m_grabDepth.view, nullptr);
+  vkDestroyImage(device, m_grabDepth.image, nullptr);
+  vkFreeMemory(device, m_grabDepth.memory, nullptr);
+
+  vkDestroyImageView(device, m_grab.view, nullptr);
+  vkDestroyImage(device, m_grab.image, nullptr);
+  vkFreeMemory(device, m_grab.memory, nullptr);
+
   for (DepthBuffer depth : m_depths) {
     vkDestroyImageView(device, depth.view, nullptr);
     vkDestroyImage(device, depth.image, nullptr);
@@ -149,6 +157,12 @@ void Renderer::recreateSwapchain() {
   for (uint32_t i = 0; i < m_sc.imageCount; ++i)
     m_depths[i] = createDepthBuffer(m_dev, m_depthFormat, m_sc.extent.width,
                                     m_sc.extent.height);
+
+  m_grab = createSceneGrab(m_dev, m_sc.format, m_sc.extent.width,
+                           m_sc.extent.height);
+  m_grabDepth = createDepthBuffer(m_dev, m_depthFormat, m_sc.extent.width,
+                                  m_sc.extent.height);
+  updateSceneGrabDescriptors(m_dev.device, m_desc, m_grabSampler, m_grab.view);
 
   if (ImGui::GetCurrentContext() != nullptr) {
     ImGui_ImplVulkan_SetMinImageCount(m_sc.imageCount);
@@ -273,6 +287,8 @@ Renderer::~Renderer() {
   }
   for (VkSemaphore sem : m_submitSem)
     vkDestroySemaphore(device, sem, nullptr);
+
+  vkDestroySampler(device, m_grabSampler, nullptr);
 
   if (m_sceneInitialized) {
     vkDestroyDescriptorPool(device, m_desc.pool, nullptr);

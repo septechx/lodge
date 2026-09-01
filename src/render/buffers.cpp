@@ -254,3 +254,25 @@ createSceneDescriptors(VkDevice device, const std::vector<Texture> &textures,
       .textureCount = textureCount,
   };
 }
+
+void updateSceneGrabDescriptors(VkDevice device,
+                                const SceneDescriptors &descriptors,
+                                VkSampler sceneSampler, VkImageView sceneView) {
+  for (VkDescriptorSet set : descriptors.sets) {
+    VkDescriptorImageInfo sceneInfo = {
+        .sampler = sceneSampler,
+        .imageView = sceneView,
+        .imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
+    };
+    VkWriteDescriptorSet write = {
+        .sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
+        .dstSet = set,
+        .dstBinding = 4,
+        .dstArrayElement = 0,
+        .descriptorCount = 1,
+        .descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
+        .pImageInfo = &sceneInfo,
+    };
+    vkUpdateDescriptorSets(device, 1, &write, 0, nullptr);
+  }
+}
