@@ -32,13 +32,124 @@ void recordFrame(VkCommandBuffer cmd, GraphicsPipelines pipelines,
                  std::span<const RenderObject> objects,
                  const SceneDescriptors &descriptors, uint32_t frameIndex,
                  VkImage image, VkImageView view, VkImage depthImage,
-                 VkImageView depthView, const VkExtent2D &extent,
+                 VkImageView depthView, SceneGrab grab, VkImage grabDepth,
+                 VkImageView grabDepthView, const VkExtent2D &extent,
                  ImDrawData *drawData) {
 
   VkCommandBufferBeginInfo begin = {
       .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO,
   };
   CHECK_VK(vkBeginCommandBuffer(cmd, &begin), "begin cmd buffer");
+
+  VkImageMemoryBarrier2 toGrab[2] = {
+      {.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2,
+       .srcStageMask = VK_PIPELINE_STAGE_2_TOP_OF_PIPE_BIT,
+       .srcAccessMask = 0,
+       .dstStageMask = VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT,
+       .dstAccessMask = VK_ACCESS_2_COLOR_ATTACHMENT_WRITE_BIT,
+       .oldLayout = VK_IMAGE_LAYOUT_UNDEFINED,
+       .newLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
+       .srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
+       .dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
+       .image = grab.image,
+       .subresourceRange = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1}},
+      {.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2,
+       .srcStageMask = VK_PIPELINE_STAGE_2_TOP_OF_PIPE_BIT,
+       .srcAccessMask = 0,
+       .dstStageMask = VK_PIPELINE_STAGE_2_EARLY_FRAGMENT_TESTS_BIT,
+       .dstAccessMask = VK_ACCESS_2_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT,
+       .oldLayout = VK_IMAGE_LAYOUT_UNDEFINED,
+       .newLayout = VK_IMAGE_LAYOUT_DEPTH_ATTACHMENT_OPTIMAL,
+       .srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
+       .dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
+       .image = grabDepth,
+       .subresourceRange = {VK_IMAGE_ASPECT_DEPTH_BIT, 0, 1, 0, 1}}};
+  VkDependencyInfo depGrab = {.sType = VK_STRUCTURE_TYPE_DEPENDENCY_INFO,
+                              .imageMemoryBarrierCount = 2,
+                              .pImageMemoryBarriers = toGrab};
+  vkCmdPipelineBarrier2(cmd, &depGrab);
+
+  VkRenderingAttachmentInfo grabColor = {
+      .sType = VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO,
+      .imageView = grab.view,
+      .imageLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
+      .loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR,
+      .storeOp = VK_ATTACHMENT_STORE_OP_STORE,
+      .clearValue = {.color = {{0.19f, 0.19f, 0.19f, 1.0f}}}};
+  VkRenderingAttachmentInfo grabDepthAtt = {
+      .sType = VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO,
+      .imageView = grabDepthView,
+      .imageLayout = VK_IMAGE_LAYOUT_DEPTH_ATTACHMENT_OPTIMAL,
+      .loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR,
+      .storeOp = VK_ATTACHMENT_STORE_OP_DONT_CARE,
+      .clearValue = {.depthStencil = {1.0f, 0}}};
+  VkRenderingInfo grabRendering = {.sType = VK_STRUCTURE_TYPE_RENDERING_INFO,
+                                   .renderArea = {{0, 0}, extent},
+                                   .layerCount = 1,
+                                   .colorAttachmentCount = 1,
+                                   .pColorAttachments = &grabColor,
+                                   .pDepthAttachment = &grabDepthAtt};
+  vkCmdBeginRendering(cmd, &grabRendering);
+
+  VkViewport viewport = {
+      0.0f,
+      0.0f,
+      static_cast<float>(extent.width),
+      static_cast<float>(extent.height),
+      0.0f,
+      1.0f,
+  };
+  VkRect2D scissor = {{0, 0}, extent};
+
+  vkCmdSetViewport(cmd, 0, 1, &viewport);
+  vkCmdSetScissor(cmd, 0, 1, &scissor);
+
+  vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS,
+                    pipelines.opaque.pipeline);
+
+  for (size_t i = 0; i < objects.size(); ++i) {
+    const RenderObject &object = objects[i];
+    if (object.material.kind != MaterialKind::Opaque) {
+      continue;
+    }
+
+    uint32_t texIdx = object.material.texture.index;
+    if (texIdx >= descriptors.textureCount)
+      texIdx = 0;
+    VkDescriptorSet set = descriptors.get(frameIndex, texIdx);
+    vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS,
+                            pipelines.opaque.layout, 0, 1, &set, 0, nullptr);
+
+    VkDeviceSize offset = 0;
+    vkCmdBindVertexBuffers(cmd, 0, 1, &object.vbuf.buffer, &offset);
+    vkCmdBindIndexBuffer(cmd, object.ibuf.buffer, 0, object.indexType);
+
+    PushConstants pc{.model = object.worldMat,
+                     .materialIdx = static_cast<uint32_t>(i)};
+    vkCmdPushConstants(cmd, pipelines.opaque.layout, VK_SHADER_STAGE_VERTEX_BIT,
+                       0, sizeof(PushConstants), &pc);
+
+    vkCmdDrawIndexed(cmd, object.indexCount, 1, 0, 0, 0);
+  }
+
+  vkCmdEndRendering(cmd);
+
+  VkImageMemoryBarrier2 grabToRead = {
+      .sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2,
+      .srcStageMask = VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT,
+      .srcAccessMask = VK_ACCESS_2_COLOR_ATTACHMENT_WRITE_BIT,
+      .dstStageMask = VK_PIPELINE_STAGE_2_FRAGMENT_SHADER_BIT,
+      .dstAccessMask = VK_ACCESS_2_SHADER_READ_BIT,
+      .oldLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
+      .newLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
+      .srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
+      .dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
+      .image = grab.image,
+      .subresourceRange = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1}};
+  VkDependencyInfo depGrabRead = {.sType = VK_STRUCTURE_TYPE_DEPENDENCY_INFO,
+                                  .imageMemoryBarrierCount = 1,
+                                  .pImageMemoryBarriers = &grabToRead};
+  vkCmdPipelineBarrier2(cmd, &depGrabRead);
 
   VkImageMemoryBarrier2 toRenderable[2] = {
       {
@@ -100,16 +211,7 @@ void recordFrame(VkCommandBuffer cmd, GraphicsPipelines pipelines,
   };
   vkCmdBeginRendering(cmd, &rendering);
 
-  VkViewport viewport = {
-      0.0f,
-      0.0f,
-      static_cast<float>(extent.width),
-      static_cast<float>(extent.height),
-      0.0f,
-      1.0f,
-  };
   vkCmdSetViewport(cmd, 0, 1, &viewport);
-  VkRect2D scissor = {{0, 0}, extent};
   vkCmdSetScissor(cmd, 0, 1, &scissor);
 
   vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS,

@@ -18,11 +18,13 @@ layout(location = 1) out vec3 fragNormal;
 layout(location = 2) out vec3 fragPos;
 layout(location = 3) flat out vec3 viewPos;
 layout(location = 4) flat out uint materialIdx;
+layout(location = 5) flat out mat4 viewProj;
 
 void main() {
     fragUV = inUv;
     viewPos = camera.viewPos;
     materialIdx = pc.materialIdx;
+    viewProj = camera.viewProj;
 
     mat3 normalMat = transpose(inverse(mat3(pc.model)));
     fragNormal = normalize(normalMat * inNormal);

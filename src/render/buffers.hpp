@@ -84,6 +84,15 @@ struct DepthBuffer {
 DepthBuffer createDepthBuffer(Device device, VkFormat format, uint32_t width,
                               uint32_t height);
 
+struct SceneGrab {
+  VkImage image;
+  VkDeviceMemory memory;
+  VkImageView view;
+};
+
+SceneGrab createSceneGrab(Device device, VkFormat format, uint32_t width,
+                          uint32_t height);
+
 struct SceneDescriptors {
   VkDescriptorSetLayout layout;
   VkDescriptorPool pool;
@@ -95,8 +104,8 @@ struct SceneDescriptors {
   }
 };
 
-SceneDescriptors createSceneDescriptors(VkDevice device,
-                                        const std::vector<Texture> &textures,
-                                        CameraUniformBuffer *cameras,
-                                        LightUniformBuffer *lights,
-                                        MaterialUniformBuffer *materials);
+SceneDescriptors
+createSceneDescriptors(VkDevice device, const std::vector<Texture> &textures,
+                       CameraUniformBuffer *cameras, LightUniformBuffer *lights,
+                       MaterialUniformBuffer *materials, VkSampler sceneSampler,
+                       VkImageView sceneView);

@@ -52,6 +52,22 @@ Renderer::Renderer(GLFWwindow &window) : m_window(window) {
     m_depths[i] = createDepthBuffer(m_dev, m_depthFormat, m_sc.extent.width,
                                     m_sc.extent.height);
 
+  m_grab = createSceneGrab(m_dev, m_sc.format, m_sc.extent.width,
+                           m_sc.extent.height);
+  m_grabDepth = createDepthBuffer(m_dev, m_depthFormat, m_sc.extent.width,
+                                  m_sc.extent.height);
+  VkSamplerCreateInfo gsci = {
+      .sType = VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO,
+      .magFilter = VK_FILTER_LINEAR,
+      .minFilter = VK_FILTER_LINEAR,
+      .mipmapMode = VK_SAMPLER_MIPMAP_MODE_LINEAR,
+      .addressModeU = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE,
+      .addressModeV = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE,
+      .addressModeW = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE,
+  };
+  CHECK_VK(vkCreateSampler(m_dev.device, &gsci, nullptr, &m_grabSampler),
+           "create grab sampler");
+
   for (int i = 0; i < MAX_FRAMES_IN_FLIGHT; ++i)
     m_cmd[i] = createCmd(m_dev.device, m_dev.queueFamily);
 
@@ -85,8 +101,9 @@ void Renderer::initScene(const AssetStore &assets) {
     m_materials[i] = createMaterialUniformBuffer(m_dev);
   }
 
-  m_desc = createSceneDescriptors(m_dev.device, assets.textures(),
-                                  m_cameraUniforms, m_lights, m_materials);
+  m_desc =
+      createSceneDescriptors(m_dev.device, assets.textures(), m_cameraUniforms,
+                             m_lights, m_materials, m_grabSampler, m_grab.view);
 
   m_pipelines = {
       .opaque = createOpaquePipeline(m_dev.device, m_sc.format, m_depthFormat,
@@ -209,7 +226,8 @@ void Renderer::drawFrame(const FrameScene &frame) {
   recordFrame(m_cmd[m_frame].cmd, m_pipelines, frame.objects, m_desc,
               static_cast<uint32_t>(m_frame), m_sc.images[imageIndex],
               m_sc.views[imageIndex], m_depths[imageIndex].image,
-              m_depths[imageIndex].view, m_sc.extent, drawData);
+              m_depths[imageIndex].view, m_grab, m_grabDepth.image,
+              m_grabDepth.view, m_sc.extent, drawData);
 
   VkPipelineStageFlags waitStage =
       VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;

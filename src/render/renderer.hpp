@@ -40,6 +40,9 @@ private:
   Swapchain m_sc;
   VkFormat m_depthFormat;
   std::vector<DepthBuffer> m_depths;
+  SceneGrab m_grab;
+  DepthBuffer m_grabDepth;
+  VkSampler m_grabSampler;
   bool m_swapchainDirty = false;
   bool m_sceneInitialized = false;
   CameraUniformBuffer m_cameraUniforms[MAX_FRAMES_IN_FLIGHT];

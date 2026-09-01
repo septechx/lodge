@@ -3,6 +3,7 @@
 #include "src/consts.hpp"
 #include "src/render/utils.hpp"
 #include "src/utils.hpp"
+#include <vulkan/vulkan_core.h>
 
 AllocatedBuffer createVertexBuffer(Device device, const void *data,
                                    VkDeviceSize size) {
@@ -92,14 +93,34 @@ DepthBuffer createDepthBuffer(Device device, VkFormat format, uint32_t width,
   return DepthBuffer{img.image, img.memory, view, format};
 }
 
-SceneDescriptors createSceneDescriptors(VkDevice device,
-                                        const std::vector<Texture> &textures,
-                                        CameraUniformBuffer *cameras,
-                                        LightUniformBuffer *lights,
-                                        MaterialUniformBuffer *materials) {
+SceneGrab createSceneGrab(Device device, VkFormat format, uint32_t width,
+                          uint32_t height) {
+  AllocatedImage img = createImage(device, width, height, format,
+                                   VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT |
+                                       VK_IMAGE_USAGE_SAMPLED_BIT);
+
+  VkImageViewCreateInfo vi = {
+      .sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO,
+      .image = img.image,
+      .viewType = VK_IMAGE_VIEW_TYPE_2D,
+      .format = format,
+      .subresourceRange = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1},
+  };
+  VkImageView view;
+  CHECK_VK(vkCreateImageView(device.device, &vi, nullptr, &view),
+           "create grab view");
+
+  return SceneGrab{img.image, img.memory, view};
+}
+
+SceneDescriptors
+createSceneDescriptors(VkDevice device, const std::vector<Texture> &textures,
+                       CameraUniformBuffer *cameras, LightUniformBuffer *lights,
+                       MaterialUniformBuffer *materials, VkSampler sceneSampler,
+                       VkImageView sceneView) {
   LDG_ASSERT(!textures.empty());
 
-  VkDescriptorSetLayoutBinding bindings[4] = {
+  VkDescriptorSetLayoutBinding bindings[5] = {
       {.binding = 0,
        .descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
        .descriptorCount = 1,
@@ -115,10 +136,14 @@ SceneDescriptors createSceneDescriptors(VkDevice device,
       {.binding = 3,
        .descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,
        .descriptorCount = 1,
+       .stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT},
+      {.binding = 4,
+       .descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
+       .descriptorCount = 1,
        .stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT}};
   VkDescriptorSetLayoutCreateInfo lci = {
       .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO,
-      .bindingCount = 4,
+      .bindingCount = 5,
       .pBindings = bindings,
   };
   VkDescriptorSetLayout setLayout;
@@ -130,7 +155,7 @@ SceneDescriptors createSceneDescriptors(VkDevice device,
 
   VkDescriptorPoolSize poolSizes[2] = {
       {.type = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
-       .descriptorCount = setCount},
+       .descriptorCount = setCount * 2},
       {.type = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,
        .descriptorCount = setCount * 3},
   };
@@ -177,7 +202,12 @@ SceneDescriptors createSceneDescriptors(VkDevice device,
           .offset = 0,
           .range = sizeof(MaterialsBlock),
       };
-      VkWriteDescriptorSet writes[4] = {
+      VkDescriptorImageInfo sceneInfo = {
+          .sampler = sceneSampler,
+          .imageView = sceneView,
+          .imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
+      };
+      VkWriteDescriptorSet writes[5] = {
           {.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
            .dstSet = sets[idx],
            .dstBinding = 0,
@@ -206,9 +236,14 @@ SceneDescriptors createSceneDescriptors(VkDevice device,
            .descriptorCount = 1,
            .descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,
            .pBufferInfo = &materialInfo},
-
-      };
-      vkUpdateDescriptorSets(device, 4, writes, 0, nullptr);
+          {.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
+           .dstSet = sets[idx],
+           .dstBinding = 4,
+           .dstArrayElement = 0,
+           .descriptorCount = 1,
+           .descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
+           .pImageInfo = &sceneInfo}};
+      vkUpdateDescriptorSets(device, 5, writes, 0, nullptr);
     }
   }
 
