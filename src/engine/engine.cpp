@@ -57,6 +57,10 @@ void Engine::buildScene() {
   GameObject &prop = m_scene->create("Box6");
   prop.renderer = ModelRenderer{box};
 
+  GameObject &prop2 = m_scene->create("Box6_2");
+  prop2.renderer = ModelRenderer{box};
+  prop2.transform.position = Vec3{4.0f, 0.0f, 1.0f};
+
   GameObject &camera = m_scene->create("Main Camera");
   camera.camera = CameraParams{};
   m_scene->setMainCamera(camera.id);

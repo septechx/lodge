@@ -170,13 +170,24 @@ EnvCube createEnvCube(Device device, VkFormat format) {
   return env;
 }
 
+void destroyEnvCube(VkDevice device, EnvCube &env) {
+  for (VkImageView view : env.faceViews) {
+    vkDestroyImageView(device, view, nullptr);
+  }
+  vkDestroyImageView(device, env.cubeView, nullptr);
+  vkDestroyImage(device, env.image, nullptr);
+  vkFreeMemory(device, env.memory, nullptr);
+  env = EnvCube{};
+}
+
 SceneDescriptors
 createSceneDescriptors(VkDevice device, const std::vector<Texture> &textures,
                        CameraUniformBuffer *cameras, LightUniformBuffer *lights,
                        MaterialUniformBuffer *materials, VkSampler sceneSampler,
                        VkImageView sceneView, VkSampler envSampler,
-                       VkImageView envView) {
+                       std::span<const VkImageView> envViews) {
   LDG_ASSERT(!textures.empty());
+  LDG_ASSERT(!envViews.empty());
 
   VkDescriptorSetLayoutBinding bindings[6] = {
       {.binding = 0,
@@ -213,7 +224,8 @@ createSceneDescriptors(VkDevice device, const std::vector<Texture> &textures,
            "create set layout");
 
   uint32_t textureCount = static_cast<uint32_t>(textures.size());
-  uint32_t setCount = textureCount * MAX_FRAMES_IN_FLIGHT;
+  uint32_t envCount = static_cast<uint32_t>(envViews.size());
+  uint32_t setCount = textureCount * envCount * MAX_FRAMES_IN_FLIGHT;
 
   VkDescriptorPoolSize poolSizes[2] = {
       {.type = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
@@ -243,81 +255,83 @@ createSceneDescriptors(VkDevice device, const std::vector<Texture> &textures,
 
   for (uint32_t t = 0; t < textureCount; ++t) {
     for (int f = 0; f < MAX_FRAMES_IN_FLIGHT; ++f) {
-      uint32_t idx = f * textureCount + t;
-      VkDescriptorImageInfo imageInfo = {
-          .sampler = textures[t].sampler,
-          .imageView = textures[t].view,
-          .imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
-      };
-      VkDescriptorBufferInfo lightInfo = {
-          .buffer = lights[f].buffer,
-          .offset = 0,
-          .range = sizeof(LightData),
-      };
-      VkDescriptorBufferInfo cameraInfo = {
-          .buffer = cameras[f].buffer,
-          .offset = 0,
-          .range = sizeof(CameraData),
-      };
-      VkDescriptorBufferInfo materialInfo = {
-          .buffer = materials[f].buffer,
-          .offset = 0,
-          .range = sizeof(MaterialsBlock),
-      };
-      VkDescriptorImageInfo sceneInfo = {
-          .sampler = sceneSampler,
-          .imageView = sceneView,
-          .imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
-      };
-      VkDescriptorImageInfo envInfo = {
-          .sampler = envSampler,
-          .imageView = envView,
-          .imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
-      };
-      VkWriteDescriptorSet writes[6] = {
-          {.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
-           .dstSet = sets[idx],
-           .dstBinding = 0,
-           .dstArrayElement = 0,
-           .descriptorCount = 1,
-           .descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
-           .pImageInfo = &imageInfo},
-          {.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
-           .dstSet = sets[idx],
-           .dstBinding = 1,
-           .dstArrayElement = 0,
-           .descriptorCount = 1,
-           .descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,
-           .pBufferInfo = &cameraInfo},
-          {.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
-           .dstSet = sets[idx],
-           .dstBinding = 2,
-           .dstArrayElement = 0,
-           .descriptorCount = 1,
-           .descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,
-           .pBufferInfo = &lightInfo},
-          {.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
-           .dstSet = sets[idx],
-           .dstBinding = 3,
-           .dstArrayElement = 0,
-           .descriptorCount = 1,
-           .descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,
-           .pBufferInfo = &materialInfo},
-          {.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
-           .dstSet = sets[idx],
-           .dstBinding = 4,
-           .dstArrayElement = 0,
-           .descriptorCount = 1,
-           .descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
-           .pImageInfo = &sceneInfo},
-          {.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
-           .dstSet = sets[idx],
-           .dstBinding = 5,
-           .dstArrayElement = 0,
-           .descriptorCount = 1,
-           .descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
-           .pImageInfo = &envInfo}};
-      vkUpdateDescriptorSets(device, 6, writes, 0, nullptr);
+      for (uint32_t e = 0; e < envCount; ++e) {
+        uint32_t idx = (f * envCount + e) * textureCount + t;
+        VkDescriptorImageInfo imageInfo = {
+            .sampler = textures[t].sampler,
+            .imageView = textures[t].view,
+            .imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
+        };
+        VkDescriptorBufferInfo lightInfo = {
+            .buffer = lights[f].buffer,
+            .offset = 0,
+            .range = sizeof(LightData),
+        };
+        VkDescriptorBufferInfo cameraInfo = {
+            .buffer = cameras[f].buffer,
+            .offset = 0,
+            .range = sizeof(CameraData),
+        };
+        VkDescriptorBufferInfo materialInfo = {
+            .buffer = materials[f].buffer,
+            .offset = 0,
+            .range = sizeof(MaterialsBlock),
+        };
+        VkDescriptorImageInfo sceneInfo = {
+            .sampler = sceneSampler,
+            .imageView = sceneView,
+            .imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
+        };
+        VkDescriptorImageInfo envInfo = {
+            .sampler = envSampler,
+            .imageView = envViews[e],
+            .imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
+        };
+        VkWriteDescriptorSet writes[6] = {
+            {.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
+             .dstSet = sets[idx],
+             .dstBinding = 0,
+             .dstArrayElement = 0,
+             .descriptorCount = 1,
+             .descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
+             .pImageInfo = &imageInfo},
+            {.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
+             .dstSet = sets[idx],
+             .dstBinding = 1,
+             .dstArrayElement = 0,
+             .descriptorCount = 1,
+             .descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,
+             .pBufferInfo = &cameraInfo},
+            {.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
+             .dstSet = sets[idx],
+             .dstBinding = 2,
+             .dstArrayElement = 0,
+             .descriptorCount = 1,
+             .descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,
+             .pBufferInfo = &lightInfo},
+            {.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
+             .dstSet = sets[idx],
+             .dstBinding = 3,
+             .dstArrayElement = 0,
+             .descriptorCount = 1,
+             .descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,
+             .pBufferInfo = &materialInfo},
+            {.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
+             .dstSet = sets[idx],
+             .dstBinding = 4,
+             .dstArrayElement = 0,
+             .descriptorCount = 1,
+             .descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
+             .pImageInfo = &sceneInfo},
+            {.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
+             .dstSet = sets[idx],
+             .dstBinding = 5,
+             .dstArrayElement = 0,
+             .descriptorCount = 1,
+             .descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
+             .pImageInfo = &envInfo}};
+        vkUpdateDescriptorSets(device, 6, writes, 0, nullptr);
+      }
     }
   }
 
@@ -326,6 +340,7 @@ createSceneDescriptors(VkDevice device, const std::vector<Texture> &textures,
       .pool = pool,
       .sets = std::move(sets),
       .textureCount = textureCount,
+      .envCount = envCount,
   };
 }
 

@@ -49,7 +49,6 @@ Renderer::Renderer(GLFWwindow &window) : m_window(window) {
   CHECK_VK(vkCreateSampler(m_dev.device, &gsci, nullptr, &m_grabSampler),
            "create grab sampler");
 
-  m_env = createEnvCube(m_dev, m_sc.format);
   VkSamplerCreateInfo esci = {
       .sType = VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO,
       .magFilter = VK_FILTER_LINEAR,
@@ -95,9 +94,35 @@ void Renderer::initScene(const AssetStore &assets, const FrameScene &frame) {
     m_materials[i] = createMaterialUniformBuffer(m_dev);
   }
 
+  m_probes.clear();
+  for (const RenderObject &object : frame.objects) {
+    if (object.material.kind != MaterialKind::Transparent) {
+      continue;
+    }
+    if (m_probes.size() >= MAX_ENVS) {
+      break;
+    }
+    m_probes.push_back({
+        object.worldMat(0, 3),
+        object.worldMat(1, 3),
+        object.worldMat(2, 3),
+    });
+  }
+
+  m_envs.clear();
+  m_envs.reserve(m_probes.size());
+  for (size_t i = 0; i < m_probes.size(); ++i) {
+    m_envs.push_back(createEnvCube(m_dev, m_sc.format));
+  }
+  std::vector<VkImageView> envViews;
+  envViews.reserve(m_envs.size());
+  for (EnvCube &env : m_envs) {
+    envViews.push_back(env.cubeView);
+  }
+
   m_desc = createSceneDescriptors(
       m_dev.device, assets.textures(), m_cameraUniforms, m_lights, m_materials,
-      m_grabSampler, m_grab.view, m_envSampler, m_env.cubeView);
+      m_grabSampler, m_grab.view, m_envSampler, envViews);
 
   if (!frame.lights.empty()) {
     LightData ld{.lightPos = frame.lights.front().pos,
@@ -126,7 +151,7 @@ void Renderer::initScene(const AssetStore &assets, const FrameScene &frame) {
                                m_sc.extent, m_desc.layout),
   };
 
-  bakeEnvironment(m_dev, m_pipelines, frame.objects, m_desc, m_env,
+  bakeEnvironment(m_dev, m_pipelines, frame.objects, m_desc, m_envs, m_probes,
                   m_cameraUniforms);
 
   m_sceneInitialized = true;
@@ -255,7 +280,7 @@ void Renderer::drawFrame(const FrameScene &frame) {
   }
 
   recordFrame(m_cmd[m_frame].cmd, m_pipelines, frame.objects, m_desc,
-              static_cast<uint32_t>(m_frame), m_sc.images[imageIndex],
+              static_cast<uint32_t>(m_frame), m_probes, m_sc.images[imageIndex],
               m_sc.views[imageIndex], m_depths[imageIndex].image,
               m_depths[imageIndex].view, m_grab, m_grabDepth.image,
               m_grabDepth.view, m_sc.extent, drawData);
@@ -308,12 +333,10 @@ Renderer::~Renderer() {
   vkDestroySampler(device, m_grabSampler, nullptr);
   vkDestroySampler(device, m_envSampler, nullptr);
 
-  for (VkImageView view : m_env.faceViews) {
-    vkDestroyImageView(device, view, nullptr);
+  for (EnvCube &env : m_envs) {
+    destroyEnvCube(device, env);
   }
-  vkDestroyImageView(device, m_env.cubeView, nullptr);
-  vkDestroyImage(device, m_env.image, nullptr);
-  vkFreeMemory(device, m_env.memory, nullptr);
+  m_envs.clear();
 
   if (m_sceneInitialized) {
     vkDestroyDescriptorPool(device, m_desc.pool, nullptr);

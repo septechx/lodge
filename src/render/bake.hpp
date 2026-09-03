@@ -6,6 +6,8 @@
 
 #include <vulkan/vulkan.h>
 
+#include <span>
+
 void recordBakeFace(VkCommandBuffer cmd, GraphicsPipelines pipelines,
                     std::span<const RenderObject> objects,
                     const SceneDescriptors &descriptors, EnvCube env,
@@ -14,5 +16,7 @@ void recordBakeFace(VkCommandBuffer cmd, GraphicsPipelines pipelines,
 
 void bakeEnvironment(Device device, GraphicsPipelines pipelines,
                      std::span<const RenderObject> objects,
-                     const SceneDescriptors &descriptors, EnvCube env,
+                     const SceneDescriptors &descriptors,
+                     std::span<const EnvCube> envs,
+                     std::span<const Vec3> probes,
                      CameraUniformBuffer *cameras);

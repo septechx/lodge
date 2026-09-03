@@ -5,6 +5,9 @@
 #include "src/render/pipelines/pipeline.hpp"
 #include "src/render/render.hpp"
 #include "src/render/utils.hpp"
+#include "src/utils.hpp"
+
+#include <cstring>
 
 void recordBakeFace(VkCommandBuffer cmd, GraphicsPipelines pipelines,
                     std::span<const RenderObject> objects,
@@ -149,10 +152,12 @@ void recordBakeFace(VkCommandBuffer cmd, GraphicsPipelines pipelines,
 
 void bakeEnvironment(Device device, GraphicsPipelines pipelines,
                      std::span<const RenderObject> objects,
-                     const SceneDescriptors &descriptors, EnvCube env,
+                     const SceneDescriptors &descriptors,
+                     std::span<const EnvCube> envs,
+                     std::span<const Vec3> probes,
                      CameraUniformBuffer *cameras) {
-  // TODO: Get the probe from the model
-  const Vec3 probe = {0.0f, 1.2f, 2.06f};
+  LDG_ASSERT(!envs.empty());
+  LDG_ASSERT(envs.size() == probes.size());
 
   CmdBundle bake = createCmd(device.device, device.queueFamily);
   VkFenceCreateInfo fci = {.sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO};
@@ -167,26 +172,29 @@ void bakeEnvironment(Device device, GraphicsPipelines pipelines,
         createDepthBuffer(device, depthFormat, CUBE_SIZE, CUBE_SIZE);
 
   Mat4 proj = Mat4::perspective(90.0f, 1.0f, 0.1f, 20.0f, false);
-  for (int f = 0; f < 6; f++) {
-    Mat4 view =
-        Mat4::lookAt(probe, probe + CUBE_FACES[f].fwd, CUBE_FACES[f].up);
-    CameraData cameraData = {.viewProj = proj * view, .viewPos = probe};
-    memcpy(cameras[0].mapped, &cameraData, sizeof(CameraData));
-    recordBakeFace(bake.cmd, pipelines, objects, descriptors, env, f,
-                   bakeDepths[f].image, bakeDepths[f].view);
+  for (size_t p = 0; p < envs.size(); ++p) {
+    const Vec3 &probe = probes[p];
+    for (int f = 0; f < 6; f++) {
+      Mat4 view =
+          Mat4::lookAt(probe, probe + CUBE_FACES[f].fwd, CUBE_FACES[f].up);
+      CameraData cameraData = {.viewProj = proj * view, .viewPos = probe};
+      memcpy(cameras[0].mapped, &cameraData, sizeof(CameraData));
+      recordBakeFace(bake.cmd, pipelines, objects, descriptors, envs[p], f,
+                     bakeDepths[f].image, bakeDepths[f].view);
 
-    VkSubmitInfo submit = {
-        .sType = VK_STRUCTURE_TYPE_SUBMIT_INFO,
-        .commandBufferCount = 1,
-        .pCommandBuffers = &bake.cmd,
-    };
-    CHECK_VK(vkQueueSubmit(device.queue, 1, &submit, bakeFence),
-             "submit bake face");
-    CHECK_VK(vkWaitForFences(device.device, 1, &bakeFence, VK_TRUE, UINT64_MAX),
-             "wait bake face");
-    CHECK_VK(vkResetFences(device.device, 1, &bakeFence), "reset bake fence");
-    CHECK_VK(vkResetCommandBuffer(bake.cmd, 0), "reset bake cmd");
-    spdlog::debug("bake: face {} done", CUBE_FACES[f].layer);
+      VkSubmitInfo submit = {
+          .sType = VK_STRUCTURE_TYPE_SUBMIT_INFO,
+          .commandBufferCount = 1,
+          .pCommandBuffers = &bake.cmd,
+      };
+      CHECK_VK(vkQueueSubmit(device.queue, 1, &submit, bakeFence),
+               "submit bake face");
+      CHECK_VK(vkWaitForFences(device.device, 1, &bakeFence, VK_TRUE, UINT64_MAX),
+               "wait bake face");
+      CHECK_VK(vkResetFences(device.device, 1, &bakeFence), "reset bake fence");
+      CHECK_VK(vkResetCommandBuffer(bake.cmd, 0), "reset bake cmd");
+      spdlog::debug("bake: probe {} face {} done", p, CUBE_FACES[f].layer);
+    }
   }
 
   vkDestroyFence(device.device, bakeFence, nullptr);

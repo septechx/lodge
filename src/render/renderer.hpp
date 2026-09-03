@@ -43,7 +43,8 @@ private:
   SceneGrab m_grab;
   DepthBuffer m_grabDepth;
   VkSampler m_grabSampler;
-  EnvCube m_env;
+  std::vector<EnvCube> m_envs;
+  std::vector<Vec3> m_probes;
   VkSampler m_envSampler;
   bool m_swapchainDirty = false;
   bool m_sceneInitialized = false;

@@ -6,6 +6,9 @@
 #include <imgui_impl_vulkan.h>
 #include <spdlog/spdlog.h>
 
+#include <algorithm>
+#include <cstdint>
+
 CmdBundle createCmd(VkDevice device, uint32_t queueFamily) {
   VkCommandPoolCreateInfo cpi = {
       .sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO,
@@ -28,13 +31,40 @@ CmdBundle createCmd(VkDevice device, uint32_t queueFamily) {
   return CmdBundle{pool, cmd};
 }
 
+static Vec3 objectCenter(const RenderObject &object) {
+  return {
+      object.worldMat(0, 3),
+      object.worldMat(1, 3),
+      object.worldMat(2, 3),
+  };
+}
+
+static uint32_t nearestProbe(Vec3 pos, std::span<const Vec3> probes,
+                             uint32_t envCount) {
+  if (probes.empty() || envCount == 0) {
+    return 0;
+  }
+  uint32_t best = 0;
+  float bestDist2 = -1.0f;
+  uint32_t count = std::min<uint32_t>(probes.size(), envCount);
+  for (uint32_t i = 0; i < count; ++i) {
+    Vec3 d = pos - probes[i];
+    float dist2 = d.length();
+    if (bestDist2 < 0.0f || dist2 < bestDist2) {
+      bestDist2 = dist2;
+      best = i;
+    }
+  }
+  return best;
+}
+
 void recordFrame(VkCommandBuffer cmd, GraphicsPipelines pipelines,
                  std::span<const RenderObject> objects,
                  const SceneDescriptors &descriptors, uint32_t frameIndex,
-                 VkImage image, VkImageView view, VkImage depthImage,
-                 VkImageView depthView, SceneGrab grab, VkImage grabDepth,
-                 VkImageView grabDepthView, const VkExtent2D &extent,
-                 ImDrawData *drawData) {
+                 std::span<const Vec3> probes, VkImage image, VkImageView view,
+                 VkImage depthImage, VkImageView depthView, SceneGrab grab,
+                 VkImage grabDepth, VkImageView grabDepthView,
+                 const VkExtent2D &extent, ImDrawData *drawData) {
 
   VkCommandBufferBeginInfo begin = {
       .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO,
@@ -275,7 +305,9 @@ void recordFrame(VkCommandBuffer cmd, GraphicsPipelines pipelines,
     uint32_t texIdx = object.material.texture.index;
     if (texIdx >= descriptors.textureCount)
       texIdx = 0;
-    VkDescriptorSet set = descriptors.get(frameIndex, texIdx);
+    uint32_t envIdx =
+        nearestProbe(objectCenter(object), probes, descriptors.envCount);
+    VkDescriptorSet set = descriptors.get(frameIndex, texIdx, envIdx);
     vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS,
                             pipelines.transparent.layout, 0, 1, &set, 0,
                             nullptr);

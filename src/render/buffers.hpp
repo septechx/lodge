@@ -5,7 +5,10 @@
 #include "src/math/Vec4.hpp"
 #include "src/render/allocator.hpp"
 
+#include <span>
 #include <vector>
+
+#define MAX_ENVS 16
 
 // TODO: Instead of `createX` we should have constructors
 
@@ -105,15 +108,18 @@ struct EnvCube {
 };
 
 EnvCube createEnvCube(Device device, VkFormat format);
+void destroyEnvCube(VkDevice device, EnvCube &env);
 
 struct SceneDescriptors {
   VkDescriptorSetLayout layout;
   VkDescriptorPool pool;
   std::vector<VkDescriptorSet> sets;
   uint32_t textureCount = 0;
+  uint32_t envCount = 0;
 
-  VkDescriptorSet get(uint32_t frame, uint32_t texIdx) const {
-    return sets[frame * textureCount + texIdx];
+  VkDescriptorSet get(uint32_t frame, uint32_t texIdx,
+                      uint32_t envIdx = 0) const {
+    return sets[(frame * envCount + envIdx) * textureCount + texIdx];
   }
 };
 
@@ -122,7 +128,7 @@ createSceneDescriptors(VkDevice device, const std::vector<Texture> &textures,
                        CameraUniformBuffer *cameras, LightUniformBuffer *lights,
                        MaterialUniformBuffer *materials, VkSampler sceneSampler,
                        VkImageView sceneView, VkSampler envSampler,
-                       VkImageView envView);
+                       std::span<const VkImageView> envViews);
 
 void updateSceneGrabDescriptors(VkDevice device,
                                 const SceneDescriptors &descriptors,
