@@ -19,4 +19,6 @@ struct AllocatedImage {
 };
 
 AllocatedImage createImage(Device device, uint32_t width, uint32_t height,
-                           VkFormat format, VkImageUsageFlags usage);
+                           VkFormat format, VkImageUsageFlags usage,
+                           VkImageCreateFlags flags = 0,
+                           uint32_t arrayLayers = 1);

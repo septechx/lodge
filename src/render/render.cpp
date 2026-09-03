@@ -105,6 +105,18 @@ void recordFrame(VkCommandBuffer cmd, GraphicsPipelines pipelines,
   vkCmdSetScissor(cmd, 0, 1, &scissor);
 
   vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS,
+                    pipelines.sky.pipeline);
+
+  // Proc sky doesn't care about material, pick last material
+  VkDescriptorSet skySet =
+      descriptors.get(frameIndex, descriptors.textureCount - 1);
+  vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS,
+                          pipelines.sky.layout, 0, 1, &skySet, 0, nullptr);
+
+  // No vertex buffer for sky, just get the rasterizer to do something
+  vkCmdDraw(cmd, 3, 1, 0, 0);
+
+  vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS,
                     pipelines.opaque.pipeline);
 
   for (size_t i = 0; i < objects.size(); ++i) {
@@ -213,6 +225,15 @@ void recordFrame(VkCommandBuffer cmd, GraphicsPipelines pipelines,
 
   vkCmdSetViewport(cmd, 0, 1, &viewport);
   vkCmdSetScissor(cmd, 0, 1, &scissor);
+
+  vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS,
+                    pipelines.sky.pipeline);
+
+  vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS,
+                          pipelines.sky.layout, 0, 1, &skySet, 0, nullptr);
+
+  // No vertex buffer for sky, just get the rasterizer to do something
+  vkCmdDraw(cmd, 3, 1, 0, 0);
 
   vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS,
                     pipelines.opaque.pipeline);

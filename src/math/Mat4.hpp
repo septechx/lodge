@@ -14,7 +14,7 @@ struct Quat;
 // 4  5  6  7
 // 8  9  10 11
 // 12 13 14 15
-// Mat4(row, col) => Mat4[6] = Mat4(3, 2)
+// Mat4(row, col) => Mat4[6] = Mat4(2, 1)
 
 struct Mat4 {
 public:
@@ -30,12 +30,12 @@ public:
         } {}
 
   static constexpr Mat4 perspective(float fovYDeg, float aspect, float nearZ,
-                                    float farZ) {
+                                    float farZ, bool flip = true) {
     const float fovYRad = fovYDeg * LDG_PI / 180.0f;
     const float f = 1.0f / std::tan(fovYRad / 2.0f);
     Mat4 r;
     r(0, 0) = f / aspect;
-    r(1, 1) = -f;
+    r(1, 1) = flip ? -f : f;
     r(2, 2) = farZ / (nearZ - farZ);
     r(2, 3) = farZ * nearZ / (nearZ - farZ);
     r(3, 2) = -1.0f;

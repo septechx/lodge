@@ -13,6 +13,7 @@ deps = [
   dependency('vulkan'),
   dependency('glfw3'),
   dependency('spdlog'),
+  dependency('dl'),
 ]
 
 include = include_directories('thirdparty', 'thirdparty/imgui', 'thirdparty/imgui/backends', 'thirdparty/tinygltf')
@@ -31,6 +32,8 @@ shaders = [
   ['shaders/opaque.frag', 'opaque.frag.spv'],
   ['shaders/transparent.vert', 'transparent.vert.spv'],
   ['shaders/transparent.frag', 'transparent.frag.spv'],
+  ['shaders/sky.vert', 'sky.vert.spv'],
+  ['shaders/sky.frag', 'sky.frag.spv'],
 ]
 
 shader_deps = []
@@ -65,9 +68,12 @@ executable(
   'src/render/device.cpp',
   'src/render/swapchain.cpp',
   'src/render/buffers.cpp',
+  'src/render/bake.cpp',
   'src/render/pipelines/pipeline.cpp',
   'src/render/pipelines/opaque.cpp',
   'src/render/pipelines/transparent.cpp',
+  'src/render/pipelines/sky.cpp',
+  'src/debug/renderdoc.cpp',
   deps_sources,
   sources: shader_deps,
   dependencies: deps,

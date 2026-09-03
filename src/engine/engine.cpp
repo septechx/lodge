@@ -9,7 +9,11 @@
 
 #include <spdlog/spdlog.h>
 
-Engine::Engine(bool enableDebug) {
+Engine::Engine(std::vector<std::string> args) {
+  if (std::ranges::find(args, "x11") != args.end()) {
+    glfwInitHint(GLFW_PLATFORM, GLFW_PLATFORM_X11);
+  }
+
   if (!glfwInit()) {
     spdlog::error("glfw init failed");
     std::exit(1);
@@ -29,8 +33,9 @@ Engine::Engine(bool enableDebug) {
   m_scene = std::make_unique<Scene>();
 
   buildScene();
-
-  m_renderer->initScene(*m_assets);
+  FrameScene frame =
+      gatherFrameScene(*m_scene, *m_assets, m_frameObjects, m_frameLights);
+  m_renderer->initScene(*m_assets, frame);
 
   m_events = std::make_unique<EventQueue>();
   m_events->attach(*m_window);
@@ -39,7 +44,7 @@ Engine::Engine(bool enableDebug) {
 
   m_layers->pushLayer("control", std::make_unique<ControlLayer>(*m_window));
 
-  if (enableDebug) {
+  if (std::ranges::find(args, "debug") != args.end()) {
     m_layers->pushOverlay("debug",
                           std::make_unique<DebugLayer>(*m_window, *m_renderer,
                                                        *m_assets, *m_scene));

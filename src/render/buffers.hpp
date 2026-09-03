@@ -7,6 +7,8 @@
 
 #include <vector>
 
+// TODO: Instead of `createX` we should have constructors
+
 AllocatedBuffer createVertexBuffer(Device device, const void *data,
                                    VkDeviceSize size);
 
@@ -81,6 +83,8 @@ struct DepthBuffer {
   VkFormat format;
 };
 
+VkFormat findDepthFormat(VkPhysicalDevice physical);
+
 DepthBuffer createDepthBuffer(Device device, VkFormat format, uint32_t width,
                               uint32_t height);
 
@@ -92,6 +96,15 @@ struct SceneGrab {
 
 SceneGrab createSceneGrab(Device device, VkFormat format, uint32_t width,
                           uint32_t height);
+
+struct EnvCube {
+  VkImage image;
+  VkDeviceMemory memory;
+  VkImageView cubeView;
+  VkImageView faceViews[6];
+};
+
+EnvCube createEnvCube(Device device, VkFormat format);
 
 struct SceneDescriptors {
   VkDescriptorSetLayout layout;
@@ -108,7 +121,9 @@ SceneDescriptors
 createSceneDescriptors(VkDevice device, const std::vector<Texture> &textures,
                        CameraUniformBuffer *cameras, LightUniformBuffer *lights,
                        MaterialUniformBuffer *materials, VkSampler sceneSampler,
-                       VkImageView sceneView);
+                       VkImageView sceneView, VkSampler envSampler,
+                       VkImageView envView);
 
-void updateSceneGrabDescriptors(VkDevice device, const SceneDescriptors &descriptors,
+void updateSceneGrabDescriptors(VkDevice device,
+                                const SceneDescriptors &descriptors,
                                 VkSampler sceneSampler, VkImageView sceneView);

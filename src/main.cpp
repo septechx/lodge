@@ -6,12 +6,17 @@
 #include <spdlog/spdlog.h>
 
 int main(int argc, char **argv) {
-  bool enableDebug = argc >= 2 && strcmp(argv[1], "--debug") == 0;
+  std::vector<std::string> args;
+  for (int i = 1; i < argc; ++i) {
+    if (std::strncmp(argv[i], "--", 2) == 0) {
+      args.emplace_back(argv[i] + 2);
+    }
+  }
 
-  if (enableDebug) {
+  if (std::ranges::find(args, "debug") != args.end()) {
     spdlog::set_level(spdlog::level::trace);
   }
 
-  Engine engine(enableDebug);
+  Engine engine(std::move(args));
   engine.run();
 }

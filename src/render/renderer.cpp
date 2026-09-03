@@ -2,8 +2,10 @@
 
 #include "src/asset/store.hpp"
 #include "src/consts.hpp"
+#include "src/render/bake.hpp"
 #include "src/render/init.hpp"
 #include "src/render/pipelines/opaque.hpp"
+#include "src/render/pipelines/sky.hpp"
 #include "src/render/pipelines/transparent.hpp"
 #include "src/render/render.hpp"
 #include "src/render/utils.hpp"
@@ -14,28 +16,7 @@
 #include <spdlog/spdlog.h>
 
 #include <cstring>
-#include <ranges>
 #include <vector>
-
-static VkFormat findDepthFormat(VkPhysicalDevice physical) {
-  static const VkFormat candidates[] = {
-      VK_FORMAT_D32_SFLOAT,
-      VK_FORMAT_D24_UNORM_S8_UINT,
-      VK_FORMAT_D32_SFLOAT_S8_UINT,
-      VK_FORMAT_D16_UNORM,
-  };
-  auto it = std::ranges::find_if(candidates, [&](VkFormat candidate) {
-    VkFormatProperties props;
-    vkGetPhysicalDeviceFormatProperties(physical, candidate, &props);
-    return props.optimalTilingFeatures &
-           VK_FORMAT_FEATURE_DEPTH_STENCIL_ATTACHMENT_BIT;
-  });
-  if (it == std::ranges::end(candidates)) {
-    spdlog::error("no supported depth format found");
-    exit(1);
-  }
-  return *it;
-}
 
 Renderer::Renderer(GLFWwindow &window) : m_window(window) {
   m_instance = createInstance();
@@ -68,6 +49,19 @@ Renderer::Renderer(GLFWwindow &window) : m_window(window) {
   CHECK_VK(vkCreateSampler(m_dev.device, &gsci, nullptr, &m_grabSampler),
            "create grab sampler");
 
+  m_env = createEnvCube(m_dev, m_sc.format);
+  VkSamplerCreateInfo esci = {
+      .sType = VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO,
+      .magFilter = VK_FILTER_LINEAR,
+      .minFilter = VK_FILTER_LINEAR,
+      .mipmapMode = VK_SAMPLER_MIPMAP_MODE_LINEAR,
+      .addressModeU = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE,
+      .addressModeV = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE,
+      .addressModeW = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE,
+  };
+  CHECK_VK(vkCreateSampler(m_dev.device, &esci, nullptr, &m_envSampler),
+           "create env sampler");
+
   for (int i = 0; i < MAX_FRAMES_IN_FLIGHT; ++i)
     m_cmd[i] = createCmd(m_dev.device, m_dev.queueFamily);
 
@@ -92,7 +86,7 @@ Renderer::Renderer(GLFWwindow &window) : m_window(window) {
   }
 }
 
-void Renderer::initScene(const AssetStore &assets) {
+void Renderer::initScene(const AssetStore &assets, const FrameScene &frame) {
   LDG_ASSERT(!m_sceneInitialized);
 
   for (int i = 0; i < MAX_FRAMES_IN_FLIGHT; ++i) {
@@ -101,16 +95,39 @@ void Renderer::initScene(const AssetStore &assets) {
     m_materials[i] = createMaterialUniformBuffer(m_dev);
   }
 
-  m_desc =
-      createSceneDescriptors(m_dev.device, assets.textures(), m_cameraUniforms,
-                             m_lights, m_materials, m_grabSampler, m_grab.view);
+  m_desc = createSceneDescriptors(
+      m_dev.device, assets.textures(), m_cameraUniforms, m_lights, m_materials,
+      m_grabSampler, m_grab.view, m_envSampler, m_env.cubeView);
+
+  if (!frame.lights.empty()) {
+    LightData ld{.lightPos = frame.lights.front().pos,
+                 .lightColor = frame.lights.front().color};
+    for (int f = 0; f < MAX_FRAMES_IN_FLIGHT; ++f)
+      memcpy(m_lights[f].mapped, &ld, sizeof(LightData));
+  }
+  for (int f = 0; f < MAX_FRAMES_IN_FLIGHT; ++f) {
+    for (size_t i = 0; i < frame.objects.size(); ++i) {
+      const Material &mat = frame.objects[i].material;
+      MaterialData &dst = m_materials[f].mapped->data[i];
+      if (mat.kind == MaterialKind::Transparent) {
+        dst.thickness = 0.09f;
+        dst.ior = 1.52f;
+      }
+      dst.baseColor = mat.baseColorFactor;
+    }
+  }
 
   m_pipelines = {
       .opaque = createOpaquePipeline(m_dev.device, m_sc.format, m_depthFormat,
                                      m_sc.extent, m_desc.layout),
       .transparent = createTransparentPipeline(
           m_dev.device, m_sc.format, m_depthFormat, m_sc.extent, m_desc.layout),
+      .sky = createSkyPipeline(m_dev.device, m_sc.format, m_depthFormat,
+                               m_sc.extent, m_desc.layout),
   };
+
+  bakeEnvironment(m_dev, m_pipelines, frame.objects, m_desc, m_env,
+                  m_cameraUniforms);
 
   m_sceneInitialized = true;
 }
@@ -289,6 +306,14 @@ Renderer::~Renderer() {
     vkDestroySemaphore(device, sem, nullptr);
 
   vkDestroySampler(device, m_grabSampler, nullptr);
+  vkDestroySampler(device, m_envSampler, nullptr);
+
+  for (VkImageView view : m_env.faceViews) {
+    vkDestroyImageView(device, view, nullptr);
+  }
+  vkDestroyImageView(device, m_env.cubeView, nullptr);
+  vkDestroyImage(device, m_env.image, nullptr);
+  vkFreeMemory(device, m_env.memory, nullptr);
 
   if (m_sceneInitialized) {
     vkDestroyDescriptorPool(device, m_desc.pool, nullptr);
@@ -298,6 +323,8 @@ Renderer::~Renderer() {
     vkDestroyPipelineLayout(device, m_pipelines.opaque.layout, nullptr);
     vkDestroyPipeline(device, m_pipelines.transparent.pipeline, nullptr);
     vkDestroyPipelineLayout(device, m_pipelines.transparent.layout, nullptr);
+    vkDestroyPipeline(device, m_pipelines.sky.pipeline, nullptr);
+    vkDestroyPipelineLayout(device, m_pipelines.sky.layout, nullptr);
 
     for (int i = 0; i < MAX_FRAMES_IN_FLIGHT; ++i) {
       vkUnmapMemory(device, m_cameraUniforms[i].memory);

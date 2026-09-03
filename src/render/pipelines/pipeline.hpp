@@ -12,6 +12,7 @@ struct GraphicsPipeline {
 struct GraphicsPipelines {
   GraphicsPipeline opaque;
   GraphicsPipeline transparent;
+  GraphicsPipeline sky;
 };
 
 struct ShaderModules {

@@ -1,9 +1,10 @@
 #include "buffers.hpp"
 
 #include "src/consts.hpp"
+#include "src/render/allocator.hpp"
+#include "src/render/cube.hpp"
 #include "src/render/utils.hpp"
 #include "src/utils.hpp"
-#include <vulkan/vulkan_core.h>
 
 AllocatedBuffer createVertexBuffer(Device device, const void *data,
                                    VkDeviceSize size) {
@@ -74,6 +75,26 @@ MaterialUniformBuffer createMaterialUniformBuffer(Device device) {
                                static_cast<MaterialsBlock *>(mapped)};
 }
 
+VkFormat findDepthFormat(VkPhysicalDevice physical) {
+  static const VkFormat candidates[] = {
+      VK_FORMAT_D32_SFLOAT,
+      VK_FORMAT_D24_UNORM_S8_UINT,
+      VK_FORMAT_D32_SFLOAT_S8_UINT,
+      VK_FORMAT_D16_UNORM,
+  };
+  auto it = std::ranges::find_if(candidates, [&](VkFormat candidate) {
+    VkFormatProperties props;
+    vkGetPhysicalDeviceFormatProperties(physical, candidate, &props);
+    return props.optimalTilingFeatures &
+           VK_FORMAT_FEATURE_DEPTH_STENCIL_ATTACHMENT_BIT;
+  });
+  if (it == std::ranges::end(candidates)) {
+    spdlog::error("no supported depth format found");
+    exit(1);
+  }
+  return *it;
+}
+
 DepthBuffer createDepthBuffer(Device device, VkFormat format, uint32_t width,
                               uint32_t height) {
   AllocatedImage img = createImage(device, width, height, format,
@@ -113,14 +134,51 @@ SceneGrab createSceneGrab(Device device, VkFormat format, uint32_t width,
   return SceneGrab{img.image, img.memory, view};
 }
 
+EnvCube createEnvCube(Device device, VkFormat format) {
+  EnvCube env;
+
+  AllocatedImage img = createImage(device, CUBE_SIZE, CUBE_SIZE, format,
+                                   VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT |
+                                       VK_IMAGE_USAGE_SAMPLED_BIT |
+                                       VK_IMAGE_USAGE_TRANSFER_SRC_BIT,
+                                   VK_IMAGE_CREATE_CUBE_COMPATIBLE_BIT, 6);
+
+  env.image = img.image;
+  env.memory = img.memory;
+
+  VkImageViewCreateInfo cvi = {
+      .sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO,
+      .image = img.image,
+      .viewType = VK_IMAGE_VIEW_TYPE_CUBE,
+      .format = format,
+      .subresourceRange = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 6},
+  };
+  CHECK_VK(vkCreateImageView(device.device, &cvi, nullptr, &env.cubeView),
+           "create env cube view");
+
+  for (uint32_t i = 0; i < 6; ++i) {
+    VkImageViewCreateInfo vi = {
+        .sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO,
+        .image = env.image,
+        .viewType = VK_IMAGE_VIEW_TYPE_2D,
+        .format = format,
+        .subresourceRange = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, i, 1}};
+    CHECK_VK(vkCreateImageView(device.device, &vi, nullptr, &env.faceViews[i]),
+             "create env face view");
+  }
+
+  return env;
+}
+
 SceneDescriptors
 createSceneDescriptors(VkDevice device, const std::vector<Texture> &textures,
                        CameraUniformBuffer *cameras, LightUniformBuffer *lights,
                        MaterialUniformBuffer *materials, VkSampler sceneSampler,
-                       VkImageView sceneView) {
+                       VkImageView sceneView, VkSampler envSampler,
+                       VkImageView envView) {
   LDG_ASSERT(!textures.empty());
 
-  VkDescriptorSetLayoutBinding bindings[5] = {
+  VkDescriptorSetLayoutBinding bindings[6] = {
       {.binding = 0,
        .descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
        .descriptorCount = 1,
@@ -140,10 +198,14 @@ createSceneDescriptors(VkDevice device, const std::vector<Texture> &textures,
       {.binding = 4,
        .descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
        .descriptorCount = 1,
+       .stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT},
+      {.binding = 5,
+       .descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
+       .descriptorCount = 1,
        .stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT}};
   VkDescriptorSetLayoutCreateInfo lci = {
       .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO,
-      .bindingCount = 5,
+      .bindingCount = 6,
       .pBindings = bindings,
   };
   VkDescriptorSetLayout setLayout;
@@ -155,7 +217,7 @@ createSceneDescriptors(VkDevice device, const std::vector<Texture> &textures,
 
   VkDescriptorPoolSize poolSizes[2] = {
       {.type = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
-       .descriptorCount = setCount * 2},
+       .descriptorCount = setCount * 3},
       {.type = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,
        .descriptorCount = setCount * 3},
   };
@@ -207,7 +269,12 @@ createSceneDescriptors(VkDevice device, const std::vector<Texture> &textures,
           .imageView = sceneView,
           .imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
       };
-      VkWriteDescriptorSet writes[5] = {
+      VkDescriptorImageInfo envInfo = {
+          .sampler = envSampler,
+          .imageView = envView,
+          .imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
+      };
+      VkWriteDescriptorSet writes[6] = {
           {.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
            .dstSet = sets[idx],
            .dstBinding = 0,
@@ -242,8 +309,15 @@ createSceneDescriptors(VkDevice device, const std::vector<Texture> &textures,
            .dstArrayElement = 0,
            .descriptorCount = 1,
            .descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
-           .pImageInfo = &sceneInfo}};
-      vkUpdateDescriptorSets(device, 5, writes, 0, nullptr);
+           .pImageInfo = &sceneInfo},
+          {.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
+           .dstSet = sets[idx],
+           .dstBinding = 5,
+           .dstArrayElement = 0,
+           .descriptorCount = 1,
+           .descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
+           .pImageInfo = &envInfo}};
+      vkUpdateDescriptorSets(device, 6, writes, 0, nullptr);
     }
   }
 

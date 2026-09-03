@@ -24,7 +24,7 @@ struct GLFWWindowDeleter {
 
 class Engine {
 public:
-  Engine(bool enableDebug);
+  Engine(std::vector<std::string> args);
   ~Engine() = default;
 
   void run();

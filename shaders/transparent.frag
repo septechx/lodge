@@ -17,6 +17,7 @@ layout(binding = 3) uniform Materials {
     MaterialData data[512];
 } materials;
 layout(binding = 4) uniform sampler2D sceneSampler;
+layout(binding = 5) uniform samplerCube envSampler;
 
 layout(location = 0) in vec2 fragUV;
 layout(location = 1) in vec3 fragNormal;
@@ -26,16 +27,6 @@ layout(location = 4) flat in uint materialIdx;
 layout(location = 5) flat in mat4 viewProj;
 
 layout(location = 0) out vec4 outColor;
-
-// Temp fake skybox
-// TODO: Sample real skybox/scene cubemap instead
-vec3 skyColor(vec3 d) {
-    d = normalize(d);
-    float h = clamp(d.y * 0.5 + 0.5, 0.0, 1.0);
-    vec3 sky = mix(vec3(0.75, 0.80, 0.85), vec3(0.25, 0.45, 0.80), h);
-    float sun = pow(max(dot(d, normalize(vec3(0.6, 0.9, 0.3))), 0.0), 512.0);
-    return sky + vec3(1.0, 0.95, 0.85) * sun * 2.0;
-}
 
 void main() {
     MaterialData material = materials.data[materialIdx];
@@ -56,7 +47,7 @@ void main() {
     transmitted *= absorb;
 
     vec3 R = reflect(V, N);
-    vec3 reflected = skyColor(R);
+    vec3 reflected = texture(envSampler, R).rgb;
     float F0 = pow((material.ior - 1.0) / (material.ior + 1.0), 2.0);
     float F = F0 + (1.0 - F0) * pow(1.0 - cosI, 5.0);
 

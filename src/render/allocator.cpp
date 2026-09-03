@@ -46,14 +46,16 @@ AllocatedBuffer createBuffer(Device device, VkDeviceSize size,
 }
 
 AllocatedImage createImage(Device device, uint32_t width, uint32_t height,
-                           VkFormat format, VkImageUsageFlags usage) {
+                           VkFormat format, VkImageUsageFlags usage,
+                           VkImageCreateFlags flags, uint32_t arrayLayers) {
   VkImageCreateInfo ici = {
       .sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO,
+      .flags = flags,
       .imageType = VK_IMAGE_TYPE_2D,
       .format = format,
       .extent = {width, height, 1},
       .mipLevels = 1,
-      .arrayLayers = 1,
+      .arrayLayers = arrayLayers,
       .samples = VK_SAMPLE_COUNT_1_BIT,
       .tiling = VK_IMAGE_TILING_OPTIMAL,
       .usage = usage,

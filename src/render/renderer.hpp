@@ -17,7 +17,7 @@ public:
   Renderer(GLFWwindow &window);
   ~Renderer();
 
-  void initScene(const AssetStore &assets);
+  void initScene(const AssetStore &assets, const FrameScene &frame);
 
   void drawFrame(const FrameScene &frame);
   void onResize(uint32_t width, uint32_t height);
@@ -43,6 +43,8 @@ private:
   SceneGrab m_grab;
   DepthBuffer m_grabDepth;
   VkSampler m_grabSampler;
+  EnvCube m_env;
+  VkSampler m_envSampler;
   bool m_swapchainDirty = false;
   bool m_sceneInitialized = false;
   CameraUniformBuffer m_cameraUniforms[MAX_FRAMES_IN_FLIGHT];

@@ -43,9 +43,9 @@ static Mat4 mat4FromNode(const tg3_node &node) {
   });
   Mat4 r = Mat4::fromQuat({
       static_cast<float>(node.rotation[3]),
-      static_cast<float>(node.rotation[2]),
-      static_cast<float>(node.rotation[1]),
       static_cast<float>(node.rotation[0]),
+      static_cast<float>(node.rotation[1]),
+      static_cast<float>(node.rotation[2]),
   });
   Mat4 s = Mat4::scale({
       static_cast<float>(node.scale[0]),
