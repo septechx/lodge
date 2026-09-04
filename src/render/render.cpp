@@ -110,7 +110,7 @@ void recordFrame(VkCommandBuffer cmd, GraphicsPipelines pipelines,
       .imageView = depthView,
       .imageLayout = VK_IMAGE_LAYOUT_DEPTH_ATTACHMENT_OPTIMAL,
       .loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR,
-      .storeOp = VK_ATTACHMENT_STORE_OP_DONT_CARE,
+      .storeOp = VK_ATTACHMENT_STORE_OP_STORE,
       .clearValue = {.depthStencil = {1.0f, 0}}};
   VkRenderingInfo grabRendering = {.sType = VK_STRUCTURE_TYPE_RENDERING_INFO,
                                    .renderArea = {{0, 0}, extent},
@@ -238,7 +238,7 @@ void recordFrame(VkCommandBuffer cmd, GraphicsPipelines pipelines,
       .sType = VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO,
       .imageView = depthView,
       .imageLayout = VK_IMAGE_LAYOUT_DEPTH_ATTACHMENT_OPTIMAL,
-      .loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR,
+      .loadOp = VK_ATTACHMENT_LOAD_OP_LOAD,
       .storeOp = VK_ATTACHMENT_STORE_OP_DONT_CARE,
       .clearValue = {.depthStencil = {1.0f, 0}},
   };
@@ -255,44 +255,15 @@ void recordFrame(VkCommandBuffer cmd, GraphicsPipelines pipelines,
   vkCmdSetViewport(cmd, 0, 1, &viewport);
   vkCmdSetScissor(cmd, 0, 1, &scissor);
 
-  // START =  TODO: Re-use grab
   vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS,
-                    pipelines.sky.pipeline);
+                    pipelines.compose_grab.pipeline);
 
+  VkDescriptorSet composeGrabSet =
+      descriptors.get(frameIndex, descriptors.textureCount - 1);
   vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS,
-                          pipelines.sky.layout, 0, 1, &skySet, 0, nullptr);
-
-  // No vertex buffer for sky, just get the rasterizer to do something
+                          pipelines.compose_grab.layout, 0, 1, &composeGrabSet,
+                          0, nullptr);
   vkCmdDraw(cmd, 3, 1, 0, 0);
-
-  vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS,
-                    pipelines.opaque.pipeline);
-
-  for (size_t i = 0; i < objects.size(); ++i) {
-    const RenderObject &object = objects[i];
-    if (object.material.kind != MaterialKind::Opaque) {
-      continue;
-    }
-
-    uint32_t texIdx = object.material.texture.index;
-    if (texIdx >= descriptors.textureCount)
-      texIdx = 0;
-    VkDescriptorSet set = descriptors.get(frameIndex, texIdx);
-    vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS,
-                            pipelines.opaque.layout, 0, 1, &set, 0, nullptr);
-
-    VkDeviceSize offset = 0;
-    vkCmdBindVertexBuffers(cmd, 0, 1, &object.vbuf.buffer, &offset);
-    vkCmdBindIndexBuffer(cmd, object.ibuf.buffer, 0, object.indexType);
-
-    PushConstants pc{.model = object.worldMat,
-                     .materialIdx = static_cast<uint32_t>(i)};
-    vkCmdPushConstants(cmd, pipelines.opaque.layout, VK_SHADER_STAGE_VERTEX_BIT,
-                       0, sizeof(PushConstants), &pc);
-
-    vkCmdDrawIndexed(cmd, object.indexCount, 1, 0, 0, 0);
-  }
-  // END
 
   vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS,
                     pipelines.transparent.pipeline);

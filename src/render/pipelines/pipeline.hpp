@@ -13,6 +13,7 @@ struct GraphicsPipelines {
   GraphicsPipeline opaque;
   GraphicsPipeline transparent;
   GraphicsPipeline sky;
+  GraphicsPipeline compose_grab;
 };
 
 struct ShaderModules {

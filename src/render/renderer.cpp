@@ -4,6 +4,7 @@
 #include "src/consts.hpp"
 #include "src/render/bake.hpp"
 #include "src/render/init.hpp"
+#include "src/render/pipelines/compose_grab.hpp"
 #include "src/render/pipelines/opaque.hpp"
 #include "src/render/pipelines/sky.hpp"
 #include "src/render/pipelines/transparent.hpp"
@@ -147,6 +148,8 @@ void Renderer::initScene(const AssetStore &assets, const FrameScene &frame) {
           m_dev.device, m_sc.format, m_depthFormat, m_sc.extent, m_desc.layout),
       .sky = createSkyPipeline(m_dev.device, m_sc.format, m_depthFormat,
                                m_sc.extent, m_desc.layout),
+      .compose_grab = createComposeGrabPipeline(
+          m_dev.device, m_sc.format, m_depthFormat, m_sc.extent, m_desc.layout),
   };
 
   bakeEnvironment(m_dev, m_pipelines, frame.objects, m_desc, m_envs, m_probes,
@@ -339,6 +342,8 @@ Renderer::~Renderer() {
     vkDestroyPipelineLayout(device, m_pipelines.transparent.layout, nullptr);
     vkDestroyPipeline(device, m_pipelines.sky.pipeline, nullptr);
     vkDestroyPipelineLayout(device, m_pipelines.sky.layout, nullptr);
+    vkDestroyPipeline(device, m_pipelines.compose_grab.pipeline, nullptr);
+    vkDestroyPipelineLayout(device, m_pipelines.compose_grab.layout, nullptr);
 
     for (int i = 0; i < MAX_FRAMES_IN_FLIGHT; ++i) {
       vkUnmapMemory(device, m_cameraUniforms[i].memory);

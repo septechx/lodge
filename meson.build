@@ -34,6 +34,8 @@ shaders = [
   ['shaders/transparent.frag', 'transparent.frag.spv'],
   ['shaders/sky.vert', 'sky.vert.spv'],
   ['shaders/sky.frag', 'sky.frag.spv'],
+  ['shaders/compose_grab.vert', 'compose_grab.vert.spv'],
+  ['shaders/compose_grab.frag', 'compose_grab.frag.spv'],
 ]
 
 shader_deps = []
@@ -73,6 +75,7 @@ executable(
   'src/render/pipelines/opaque.cpp',
   'src/render/pipelines/transparent.cpp',
   'src/render/pipelines/sky.cpp',
+  'src/render/pipelines/compose_grab.cpp',
   'src/debug/renderdoc.cpp',
   deps_sources,
   sources: shader_deps,
