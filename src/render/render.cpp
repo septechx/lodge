@@ -63,7 +63,6 @@ void recordFrame(VkCommandBuffer cmd, GraphicsPipelines pipelines,
                  const SceneDescriptors &descriptors, uint32_t frameIndex,
                  std::span<const Vec3> probes, VkImage image, VkImageView view,
                  VkImage depthImage, VkImageView depthView, SceneGrab grab,
-                 VkImage grabDepth, VkImageView grabDepthView,
                  const VkExtent2D &extent, ImDrawData *drawData) {
 
   VkCommandBufferBeginInfo begin = {
@@ -92,7 +91,7 @@ void recordFrame(VkCommandBuffer cmd, GraphicsPipelines pipelines,
        .newLayout = VK_IMAGE_LAYOUT_DEPTH_ATTACHMENT_OPTIMAL,
        .srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
        .dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
-       .image = grabDepth,
+       .image = depthImage,
        .subresourceRange = {VK_IMAGE_ASPECT_DEPTH_BIT, 0, 1, 0, 1}}};
   VkDependencyInfo depGrab = {.sType = VK_STRUCTURE_TYPE_DEPENDENCY_INFO,
                               .imageMemoryBarrierCount = 2,
@@ -108,7 +107,7 @@ void recordFrame(VkCommandBuffer cmd, GraphicsPipelines pipelines,
       .clearValue = {.color = {{0.19f, 0.19f, 0.19f, 1.0f}}}};
   VkRenderingAttachmentInfo grabDepthAtt = {
       .sType = VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO,
-      .imageView = grabDepthView,
+      .imageView = depthView,
       .imageLayout = VK_IMAGE_LAYOUT_DEPTH_ATTACHMENT_OPTIMAL,
       .loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR,
       .storeOp = VK_ATTACHMENT_STORE_OP_DONT_CARE,
@@ -256,6 +255,7 @@ void recordFrame(VkCommandBuffer cmd, GraphicsPipelines pipelines,
   vkCmdSetViewport(cmd, 0, 1, &viewport);
   vkCmdSetScissor(cmd, 0, 1, &scissor);
 
+  // START =  TODO: Re-use grab
   vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS,
                     pipelines.sky.pipeline);
 
@@ -292,6 +292,7 @@ void recordFrame(VkCommandBuffer cmd, GraphicsPipelines pipelines,
 
     vkCmdDrawIndexed(cmd, object.indexCount, 1, 0, 0, 0);
   }
+  // END
 
   vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS,
                     pipelines.transparent.pipeline);

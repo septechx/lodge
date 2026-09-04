@@ -35,8 +35,6 @@ Renderer::Renderer(GLFWwindow &window) : m_window(window) {
 
   m_grab = createSceneGrab(m_dev, m_sc.format, m_sc.extent.width,
                            m_sc.extent.height);
-  m_grabDepth = createDepthBuffer(m_dev, m_depthFormat, m_sc.extent.width,
-                                  m_sc.extent.height);
   VkSamplerCreateInfo gsci = {
       .sType = VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO,
       .magFilter = VK_FILTER_LINEAR,
@@ -166,10 +164,6 @@ void Renderer::onResize(uint32_t width, uint32_t height) {
 void Renderer::destroySwapchainResources() {
   const VkDevice device = m_dev.device;
 
-  vkDestroyImageView(device, m_grabDepth.view, nullptr);
-  vkDestroyImage(device, m_grabDepth.image, nullptr);
-  vkFreeMemory(device, m_grabDepth.memory, nullptr);
-
   vkDestroyImageView(device, m_grab.view, nullptr);
   vkDestroyImage(device, m_grab.image, nullptr);
   vkFreeMemory(device, m_grab.memory, nullptr);
@@ -202,8 +196,6 @@ void Renderer::recreateSwapchain() {
 
   m_grab = createSceneGrab(m_dev, m_sc.format, m_sc.extent.width,
                            m_sc.extent.height);
-  m_grabDepth = createDepthBuffer(m_dev, m_depthFormat, m_sc.extent.width,
-                                  m_sc.extent.height);
   updateSceneGrabDescriptors(m_dev.device, m_desc, m_grabSampler, m_grab.view);
 
   if (ImGui::GetCurrentContext() != nullptr) {
@@ -282,8 +274,7 @@ void Renderer::drawFrame(const FrameScene &frame) {
   recordFrame(m_cmd[m_frame].cmd, m_pipelines, frame.objects, m_desc,
               static_cast<uint32_t>(m_frame), m_probes, m_sc.images[imageIndex],
               m_sc.views[imageIndex], m_depths[imageIndex].image,
-              m_depths[imageIndex].view, m_grab, m_grabDepth.image,
-              m_grabDepth.view, m_sc.extent, drawData);
+              m_depths[imageIndex].view, m_grab, m_sc.extent, drawData);
 
   VkPipelineStageFlags waitStage =
       VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;

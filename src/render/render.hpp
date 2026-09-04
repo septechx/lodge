@@ -21,5 +21,4 @@ void recordFrame(VkCommandBuffer cmd, GraphicsPipelines pipelines,
                  const SceneDescriptors &descriptors, uint32_t frameIndex,
                  std::span<const Vec3> probes, VkImage image, VkImageView view,
                  VkImage depthImage, VkImageView depthView, SceneGrab grab,
-                 VkImage grabDepth, VkImageView grabDepthView,
                  const VkExtent2D &extent, ImDrawData *drawData = nullptr);

@@ -41,7 +41,6 @@ private:
   VkFormat m_depthFormat;
   std::vector<DepthBuffer> m_depths;
   SceneGrab m_grab;
-  DepthBuffer m_grabDepth;
   VkSampler m_grabSampler;
   std::vector<EnvCube> m_envs;
   std::vector<Vec3> m_probes;
