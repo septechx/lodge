@@ -30,12 +30,13 @@ deps_sources = files(
 shaders = [
   ['shaders/opaque.vert', 'opaque.vert.spv'],
   ['shaders/opaque.frag', 'opaque.frag.spv'],
+  ['shaders/opaque_grab.frag', 'opaque_grab.frag.spv'],
+  ['shaders/opaque_comp.frag', 'opaque_comp.frag.spv'],
   ['shaders/transparent.vert', 'transparent.vert.spv'],
   ['shaders/transparent.frag', 'transparent.frag.spv'],
   ['shaders/sky.vert', 'sky.vert.spv'],
   ['shaders/sky.frag', 'sky.frag.spv'],
-  ['shaders/compose_grab.vert', 'compose_grab.vert.spv'],
-  ['shaders/compose_grab.frag', 'compose_grab.frag.spv'],
+  ['shaders/ssr.comp', 'ssr.comp.spv'],
 ]
 
 shader_deps = []
@@ -75,7 +76,7 @@ executable(
   'src/render/pipelines/opaque.cpp',
   'src/render/pipelines/transparent.cpp',
   'src/render/pipelines/sky.cpp',
-  'src/render/pipelines/compose_grab.cpp',
+  'src/render/pipelines/ssr.cpp',
   'src/debug/renderdoc.cpp',
   deps_sources,
   sources: shader_deps,

@@ -11,9 +11,16 @@ struct GraphicsPipeline {
 
 struct GraphicsPipelines {
   GraphicsPipeline opaque;
+  GraphicsPipeline opaqueGrab;
+  GraphicsPipeline opaqueComp;
   GraphicsPipeline transparent;
   GraphicsPipeline sky;
-  GraphicsPipeline compose_grab;
+  GraphicsPipeline skyGrab;
+};
+
+struct ComputePipeline {
+  VkPipeline pipeline;
+  VkPipelineLayout layout;
 };
 
 struct ShaderModules {

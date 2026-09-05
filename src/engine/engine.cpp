@@ -9,6 +9,8 @@
 
 #include <spdlog/spdlog.h>
 
+#include <filesystem>
+
 Engine::Engine(std::vector<std::string> args) {
   if (std::ranges::find(args, "x11") != args.end()) {
     glfwInitHint(GLFW_PLATFORM, GLFW_PLATFORM_X11);
@@ -60,6 +62,11 @@ void Engine::buildScene() {
   GameObject &prop2 = m_scene->create("Box6_2");
   prop2.renderer = ModelRenderer{box};
   prop2.transform.position = Vec3{4.0f, 0.0f, 1.0f};
+
+  ModelHandle box2 = loadModel(*m_assets, "models/Box2_2.glb");
+  GameObject &prop3 = m_scene->create("Box2");
+  prop3.renderer = ModelRenderer{box2};
+  prop3.transform.position = Vec3{1.0f, 0.0f, 4.0f};
 
   GameObject &camera = m_scene->create("Main Camera");
   camera.camera = CameraParams{};

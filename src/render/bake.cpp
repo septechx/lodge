@@ -90,8 +90,8 @@ void recordBakeFace(VkCommandBuffer cmd, GraphicsPipelines pipelines,
   vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS,
                     pipelines.sky.pipeline);
 
-  // Proc sky doesn't care about material, pick last material
-  VkDescriptorSet skySet = descriptors.get(0, descriptors.textureCount - 1);
+  LDG_ASSERT(!descriptors.bakeSets.empty());
+  VkDescriptorSet skySet = descriptors.bakeSets.back();
   vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS,
                           pipelines.sky.layout, 0, 1, &skySet, 0, nullptr);
 
@@ -108,9 +108,9 @@ void recordBakeFace(VkCommandBuffer cmd, GraphicsPipelines pipelines,
     }
 
     uint32_t texIdx = object.material.texture.index;
-    if (texIdx >= descriptors.textureCount)
+    if (texIdx >= descriptors.bakeSets.size())
       texIdx = 0;
-    VkDescriptorSet set = descriptors.get(0, texIdx);
+    VkDescriptorSet set = descriptors.bakeSets[texIdx];
     vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS,
                             pipelines.opaque.layout, 0, 1, &set, 0, nullptr);
 
@@ -150,59 +150,98 @@ void recordBakeFace(VkCommandBuffer cmd, GraphicsPipelines pipelines,
   CHECK_VK(vkEndCommandBuffer(cmd), "end bake cmd");
 }
 
+void bakeOneFace(Device device, GraphicsPipelines pipelines,
+                 std::span<const RenderObject> objects,
+                 const SceneDescriptors &descriptors, EnvCube env, Vec3 probe,
+                 uint32_t face, CameraUniformBuffer &bakeCamera,
+                 DepthBuffer &bakeDepth, CmdBundle &bakeCmd,
+                 VkFence bakeFence) {
+  Mat4 proj = Mat4::perspective(90.0f, 1.0f, 0.1f, 20.0f, false);
+  Mat4 view =
+      Mat4::lookAt(probe, probe + CUBE_FACES[face].fwd, CUBE_FACES[face].up);
+  CameraData cameraData = {.viewProj = proj * view, .viewPos = probe};
+  memcpy(bakeCamera.mapped, &cameraData, sizeof(CameraData));
+
+  recordBakeFace(bakeCmd.cmd, pipelines, objects, descriptors, env, face,
+                 bakeDepth.image, bakeDepth.view);
+
+  VkSubmitInfo submit = {
+      .sType = VK_STRUCTURE_TYPE_SUBMIT_INFO,
+      .commandBufferCount = 1,
+      .pCommandBuffers = &bakeCmd.cmd,
+  };
+  CHECK_VK(vkQueueSubmit(device.queue, 1, &submit, bakeFence),
+           "submit bake face");
+  CHECK_VK(vkWaitForFences(device.device, 1, &bakeFence, VK_TRUE, UINT64_MAX),
+           "wait bake face");
+  CHECK_VK(vkResetFences(device.device, 1, &bakeFence), "reset bake fence");
+  CHECK_VK(vkResetCommandBuffer(bakeCmd.cmd, 0), "reset bake cmd");
+}
+
+bool tryBakeOneFaceAsync(Device device, GraphicsPipelines pipelines,
+                         std::span<const RenderObject> objects,
+                         const SceneDescriptors &descriptors, EnvCube env,
+                         Vec3 probe, uint32_t face,
+                         CameraUniformBuffer &bakeCamera,
+                         LightUniformBuffer &bakeLights,
+                         MaterialUniformBuffer &bakeMaterials,
+                         const LightData *freshLightOrNull,
+                         const MaterialsBlock *freshMaterials,
+                         DepthBuffer &bakeDepth, CmdBundle &bakeCmd,
+                         VkFence bakeFence, bool &pending) {
+  if (pending) {
+    VkResult status = vkGetFenceStatus(device.device, bakeFence);
+    if (status == VK_NOT_READY) {
+      return false;
+    }
+    CHECK_VK(status, "poll bake fence");
+    CHECK_VK(vkResetFences(device.device, 1, &bakeFence), "reset bake fence");
+    CHECK_VK(vkResetCommandBuffer(bakeCmd.cmd, 0), "reset bake cmd");
+    pending = false;
+  }
+
+  if (freshLightOrNull != nullptr) {
+    memcpy(bakeLights.mapped, freshLightOrNull, sizeof(LightData));
+  }
+  if (freshMaterials != nullptr) {
+    memcpy(bakeMaterials.mapped, freshMaterials, sizeof(MaterialsBlock));
+  }
+
+  Mat4 proj = Mat4::perspective(90.0f, 1.0f, 0.1f, 20.0f, false);
+  Mat4 view =
+      Mat4::lookAt(probe, probe + CUBE_FACES[face].fwd, CUBE_FACES[face].up);
+  CameraData cameraData = {.viewProj = proj * view, .viewPos = probe};
+  memcpy(bakeCamera.mapped, &cameraData, sizeof(CameraData));
+
+  recordBakeFace(bakeCmd.cmd, pipelines, objects, descriptors, env, face,
+                 bakeDepth.image, bakeDepth.view);
+
+  VkSubmitInfo submit = {
+      .sType = VK_STRUCTURE_TYPE_SUBMIT_INFO,
+      .commandBufferCount = 1,
+      .pCommandBuffers = &bakeCmd.cmd,
+  };
+  CHECK_VK(vkQueueSubmit(device.queue, 1, &submit, bakeFence),
+           "submit bake face async");
+  pending = true;
+  return true;
+}
+
 void bakeEnvironment(Device device, GraphicsPipelines pipelines,
                      std::span<const RenderObject> objects,
                      const SceneDescriptors &descriptors,
                      std::span<const EnvCube> envs,
                      std::span<const Vec3> probes,
-                     CameraUniformBuffer *cameras) {
+                     CameraUniformBuffer &bakeCamera, DepthBuffer &bakeDepth,
+                     CmdBundle &bakeCmd, VkFence bakeFence) {
   LDG_ASSERT(!envs.empty());
   LDG_ASSERT(envs.size() == probes.size());
 
-  CmdBundle bake = createCmd(device.device, device.queueFamily);
-  VkFenceCreateInfo fci = {.sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO};
-  VkFence bakeFence;
-  CHECK_VK(vkCreateFence(device.device, &fci, nullptr, &bakeFence),
-           "bake fence");
-
-  DepthBuffer bakeDepths[6];
-  VkFormat depthFormat = findDepthFormat(device.physical);
-  for (int f = 0; f < 6; f++)
-    bakeDepths[f] =
-        createDepthBuffer(device, depthFormat, CUBE_SIZE, CUBE_SIZE);
-
-  Mat4 proj = Mat4::perspective(90.0f, 1.0f, 0.1f, 20.0f, false);
   for (size_t p = 0; p < envs.size(); ++p) {
-    const Vec3 &probe = probes[p];
-    for (int f = 0; f < 6; f++) {
-      Mat4 view =
-          Mat4::lookAt(probe, probe + CUBE_FACES[f].fwd, CUBE_FACES[f].up);
-      CameraData cameraData = {.viewProj = proj * view, .viewPos = probe};
-      memcpy(cameras[0].mapped, &cameraData, sizeof(CameraData));
-      recordBakeFace(bake.cmd, pipelines, objects, descriptors, envs[p], f,
-                     bakeDepths[f].image, bakeDepths[f].view);
-
-      VkSubmitInfo submit = {
-          .sType = VK_STRUCTURE_TYPE_SUBMIT_INFO,
-          .commandBufferCount = 1,
-          .pCommandBuffers = &bake.cmd,
-      };
-      CHECK_VK(vkQueueSubmit(device.queue, 1, &submit, bakeFence),
-               "submit bake face");
-      CHECK_VK(vkWaitForFences(device.device, 1, &bakeFence, VK_TRUE, UINT64_MAX),
-               "wait bake face");
-      CHECK_VK(vkResetFences(device.device, 1, &bakeFence), "reset bake fence");
-      CHECK_VK(vkResetCommandBuffer(bake.cmd, 0), "reset bake cmd");
+    for (uint32_t f = 0; f < 6; f++) {
+      bakeOneFace(device, pipelines, objects, descriptors, envs[p], probes[p],
+                  f, bakeCamera, bakeDepth, bakeCmd, bakeFence);
       spdlog::debug("bake: probe {} face {} done", p, CUBE_FACES[f].layer);
     }
-  }
-
-  vkDestroyFence(device.device, bakeFence, nullptr);
-  vkFreeCommandBuffers(device.device, bake.pool, 1, &bake.cmd);
-  vkDestroyCommandPool(device.device, bake.pool, nullptr);
-  for (int f = 0; f < 6; f++) {
-    vkDestroyImageView(device.device, bakeDepths[f].view, nullptr);
-    vkDestroyImage(device.device, bakeDepths[f].image, nullptr);
-    vkFreeMemory(device.device, bakeDepths[f].memory, nullptr);
   }
 }

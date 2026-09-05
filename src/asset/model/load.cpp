@@ -389,6 +389,8 @@ static std::vector<ModelPart> buildParts(AssetStore &store,
 
         uint32_t texIndex = store.whiteTexture().index;
         float baseColorFactor[4] = {1.0f, 1.0f, 1.0f, 1.0f};
+        float metallicFactor = 0.0f;
+        float roughnessFactor = 1.0f;
         bool isBlend = false;
         bool doubleSided = false;
         if (prim->material >= 0 &&
@@ -400,6 +402,11 @@ static std::vector<ModelPart> buildParts(AssetStore &store,
           for (int c = 0; c < 4; ++c)
             baseColorFactor[c] = static_cast<float>(
                 mat->pbr_metallic_roughness.base_color_factor[c]);
+
+          metallicFactor =
+              static_cast<float>(mat->pbr_metallic_roughness.metallic_factor);
+          roughnessFactor =
+              static_cast<float>(mat->pbr_metallic_roughness.roughness_factor);
 
           int texIdx = mat->pbr_metallic_roughness.base_color_texture.index;
           if (texIdx >= 0 &&
@@ -429,6 +436,8 @@ static std::vector<ModelPart> buildParts(AssetStore &store,
                                 baseColorFactor[2], baseColorFactor[3]},
             .doubleSided = doubleSided,
             .kind = isBlend ? MaterialKind::Transparent : MaterialKind::Opaque,
+            .metallicFactor = metallicFactor,
+            .roughnessFactor = roughnessFactor,
         };
         part.local = world;
         parts.push_back(part);

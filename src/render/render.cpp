@@ -59,10 +59,12 @@ static uint32_t nearestProbe(Vec3 pos, std::span<const Vec3> probes,
 }
 
 void recordFrame(VkCommandBuffer cmd, GraphicsPipelines pipelines,
-                 std::span<const RenderObject> objects,
+                 ComputePipeline ssr, std::span<const RenderObject> objects,
                  const SceneDescriptors &descriptors, uint32_t frameIndex,
                  std::span<const Vec3> probes, VkImage image, VkImageView view,
                  VkImage depthImage, VkImageView depthView, SceneGrab grab,
+                 SceneGrab grabNormal, VkImage grabDepthImage,
+                 VkImageView grabDepthView, SsrTarget ssrTarget,
                  const VkExtent2D &extent, ImDrawData *drawData) {
 
   VkCommandBufferBeginInfo begin = {
@@ -70,7 +72,18 @@ void recordFrame(VkCommandBuffer cmd, GraphicsPipelines pipelines,
   };
   CHECK_VK(vkBeginCommandBuffer(cmd, &begin), "begin cmd buffer");
 
-  VkImageMemoryBarrier2 toGrab[2] = {
+  VkViewport viewport = {
+      0.0f,
+      0.0f,
+      static_cast<float>(extent.width),
+      static_cast<float>(extent.height),
+      0.0f,
+      1.0f,
+  };
+  VkRect2D scissor = {{0, 0}, extent};
+
+  // ---- Pass A: sky + opaque -> offscreen grab (color + normal + depth) ----
+  VkImageMemoryBarrier2 toGrab[3] = {
       {.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2,
        .srcStageMask = VK_PIPELINE_STAGE_2_TOP_OF_PIPE_BIT,
        .srcAccessMask = 0,
@@ -85,29 +98,46 @@ void recordFrame(VkCommandBuffer cmd, GraphicsPipelines pipelines,
       {.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2,
        .srcStageMask = VK_PIPELINE_STAGE_2_TOP_OF_PIPE_BIT,
        .srcAccessMask = 0,
+       .dstStageMask = VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT,
+       .dstAccessMask = VK_ACCESS_2_COLOR_ATTACHMENT_WRITE_BIT,
+       .oldLayout = VK_IMAGE_LAYOUT_UNDEFINED,
+       .newLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
+       .srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
+       .dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
+       .image = grabNormal.image,
+       .subresourceRange = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1}},
+      {.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2,
+       .srcStageMask = VK_PIPELINE_STAGE_2_TOP_OF_PIPE_BIT,
+       .srcAccessMask = 0,
        .dstStageMask = VK_PIPELINE_STAGE_2_EARLY_FRAGMENT_TESTS_BIT,
        .dstAccessMask = VK_ACCESS_2_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT,
        .oldLayout = VK_IMAGE_LAYOUT_UNDEFINED,
        .newLayout = VK_IMAGE_LAYOUT_DEPTH_ATTACHMENT_OPTIMAL,
        .srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
        .dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
-       .image = depthImage,
+       .image = grabDepthImage,
        .subresourceRange = {VK_IMAGE_ASPECT_DEPTH_BIT, 0, 1, 0, 1}}};
   VkDependencyInfo depGrab = {.sType = VK_STRUCTURE_TYPE_DEPENDENCY_INFO,
-                              .imageMemoryBarrierCount = 2,
+                              .imageMemoryBarrierCount = 3,
                               .pImageMemoryBarriers = toGrab};
   vkCmdPipelineBarrier2(cmd, &depGrab);
 
-  VkRenderingAttachmentInfo grabColor = {
-      .sType = VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO,
-      .imageView = grab.view,
-      .imageLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
-      .loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR,
-      .storeOp = VK_ATTACHMENT_STORE_OP_STORE,
-      .clearValue = {.color = {{0.19f, 0.19f, 0.19f, 1.0f}}}};
+  VkRenderingAttachmentInfo grabAttachments[2] = {
+      {.sType = VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO,
+       .imageView = grab.view,
+       .imageLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
+       .loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR,
+       .storeOp = VK_ATTACHMENT_STORE_OP_STORE,
+       .clearValue = {.color = {{0.19f, 0.19f, 0.19f, 1.0f}}}},
+      {.sType = VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO,
+       .imageView = grabNormal.view,
+       .imageLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
+       .loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR,
+       .storeOp = VK_ATTACHMENT_STORE_OP_STORE,
+       .clearValue = {.color = {{0.5f, 0.5f, 0.5f, 1.0f}}}}};
   VkRenderingAttachmentInfo grabDepthAtt = {
       .sType = VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO,
-      .imageView = depthView,
+      .imageView = grabDepthView,
       .imageLayout = VK_IMAGE_LAYOUT_DEPTH_ATTACHMENT_OPTIMAL,
       .loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR,
       .storeOp = VK_ATTACHMENT_STORE_OP_STORE,
@@ -115,38 +145,26 @@ void recordFrame(VkCommandBuffer cmd, GraphicsPipelines pipelines,
   VkRenderingInfo grabRendering = {.sType = VK_STRUCTURE_TYPE_RENDERING_INFO,
                                    .renderArea = {{0, 0}, extent},
                                    .layerCount = 1,
-                                   .colorAttachmentCount = 1,
-                                   .pColorAttachments = &grabColor,
+                                   .colorAttachmentCount = 2,
+                                   .pColorAttachments = grabAttachments,
                                    .pDepthAttachment = &grabDepthAtt};
   vkCmdBeginRendering(cmd, &grabRendering);
-
-  VkViewport viewport = {
-      0.0f,
-      0.0f,
-      static_cast<float>(extent.width),
-      static_cast<float>(extent.height),
-      0.0f,
-      1.0f,
-  };
-  VkRect2D scissor = {{0, 0}, extent};
 
   vkCmdSetViewport(cmd, 0, 1, &viewport);
   vkCmdSetScissor(cmd, 0, 1, &scissor);
 
   vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS,
-                    pipelines.sky.pipeline);
+                    pipelines.skyGrab.pipeline);
 
-  // Proc sky doesn't care about material, pick last material
-  VkDescriptorSet skySet =
+  VkDescriptorSet skyGrabSet =
       descriptors.get(frameIndex, descriptors.textureCount - 1);
   vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS,
-                          pipelines.sky.layout, 0, 1, &skySet, 0, nullptr);
-
-  // No vertex buffer for sky, just get the rasterizer to do something
+                          pipelines.skyGrab.layout, 0, 1, &skyGrabSet, 0,
+                          nullptr);
   vkCmdDraw(cmd, 3, 1, 0, 0);
 
   vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS,
-                    pipelines.opaque.pipeline);
+                    pipelines.opaqueGrab.pipeline);
 
   for (size_t i = 0; i < objects.size(); ++i) {
     const RenderObject &object = objects[i];
@@ -157,9 +175,12 @@ void recordFrame(VkCommandBuffer cmd, GraphicsPipelines pipelines,
     uint32_t texIdx = object.material.texture.index;
     if (texIdx >= descriptors.textureCount)
       texIdx = 0;
-    VkDescriptorSet set = descriptors.get(frameIndex, texIdx);
+    uint32_t envIdx =
+        nearestProbe(objectCenter(object), probes, descriptors.envCount);
+    VkDescriptorSet set = descriptors.get(frameIndex, texIdx, envIdx);
     vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS,
-                            pipelines.opaque.layout, 0, 1, &set, 0, nullptr);
+                            pipelines.opaqueGrab.layout, 0, 1, &set, 0,
+                            nullptr);
 
     VkDeviceSize offset = 0;
     vkCmdBindVertexBuffers(cmd, 0, 1, &object.vbuf.buffer, &offset);
@@ -167,31 +188,98 @@ void recordFrame(VkCommandBuffer cmd, GraphicsPipelines pipelines,
 
     PushConstants pc{.model = object.worldMat,
                      .materialIdx = static_cast<uint32_t>(i)};
-    vkCmdPushConstants(cmd, pipelines.opaque.layout, VK_SHADER_STAGE_VERTEX_BIT,
-                       0, sizeof(PushConstants), &pc);
+    vkCmdPushConstants(cmd, pipelines.opaqueGrab.layout,
+                       VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(PushConstants),
+                       &pc);
 
     vkCmdDrawIndexed(cmd, object.indexCount, 1, 0, 0, 0);
   }
 
   vkCmdEndRendering(cmd);
 
-  VkImageMemoryBarrier2 grabToRead = {
+  VkImageMemoryBarrier2 grabToRead[3] = {
+      {.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2,
+       .srcStageMask = VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT,
+       .srcAccessMask = VK_ACCESS_2_COLOR_ATTACHMENT_WRITE_BIT,
+       .dstStageMask = VK_PIPELINE_STAGE_2_FRAGMENT_SHADER_BIT,
+       .dstAccessMask = VK_ACCESS_2_SHADER_READ_BIT,
+       .oldLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
+       .newLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
+       .srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
+       .dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
+       .image = grab.image,
+       .subresourceRange = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1}},
+      {.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2,
+       .srcStageMask = VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT,
+       .srcAccessMask = VK_ACCESS_2_COLOR_ATTACHMENT_WRITE_BIT,
+       .dstStageMask = VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT,
+       .dstAccessMask = VK_ACCESS_2_SHADER_READ_BIT,
+       .oldLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
+       .newLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
+       .srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
+       .dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
+       .image = grabNormal.image,
+       .subresourceRange = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1}},
+      {.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2,
+       .srcStageMask = VK_PIPELINE_STAGE_2_EARLY_FRAGMENT_TESTS_BIT |
+                       VK_PIPELINE_STAGE_2_LATE_FRAGMENT_TESTS_BIT,
+       .srcAccessMask = VK_ACCESS_2_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT,
+       .dstStageMask = VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT,
+       .dstAccessMask = VK_ACCESS_2_SHADER_READ_BIT,
+       .oldLayout = VK_IMAGE_LAYOUT_DEPTH_ATTACHMENT_OPTIMAL,
+       .newLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
+       .srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
+       .dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
+       .image = grabDepthImage,
+       .subresourceRange = {VK_IMAGE_ASPECT_DEPTH_BIT, 0, 1, 0, 1}}};
+  VkDependencyInfo depGrabRead = {.sType = VK_STRUCTURE_TYPE_DEPENDENCY_INFO,
+                                  .imageMemoryBarrierCount = 3,
+                                  .pImageMemoryBarriers = grabToRead};
+  vkCmdPipelineBarrier2(cmd, &depGrabRead);
+
+  // ---- Dispatch: SSR march over the whole frame ----
+  VkImageMemoryBarrier2 ssrToGeneral = {
       .sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2,
-      .srcStageMask = VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT,
-      .srcAccessMask = VK_ACCESS_2_COLOR_ATTACHMENT_WRITE_BIT,
+      .srcStageMask = VK_PIPELINE_STAGE_2_TOP_OF_PIPE_BIT,
+      .srcAccessMask = 0,
+      .dstStageMask = VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT,
+      .dstAccessMask = VK_ACCESS_2_SHADER_STORAGE_WRITE_BIT,
+      .oldLayout = VK_IMAGE_LAYOUT_UNDEFINED,
+      .newLayout = VK_IMAGE_LAYOUT_GENERAL,
+      .srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
+      .dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
+      .image = ssrTarget.image,
+      .subresourceRange = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1}};
+  VkDependencyInfo depSsrW = {.sType = VK_STRUCTURE_TYPE_DEPENDENCY_INFO,
+                              .imageMemoryBarrierCount = 1,
+                              .pImageMemoryBarriers = &ssrToGeneral};
+  vkCmdPipelineBarrier2(cmd, &depSsrW);
+
+  vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, ssr.pipeline);
+  VkDescriptorSet ssrSet =
+      descriptors.get(frameIndex, descriptors.textureCount - 1, 0);
+  vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, ssr.layout, 0,
+                          1, &ssrSet, 0, nullptr);
+  vkCmdDispatch(cmd, (extent.width + 15) / 16, (extent.height + 15) / 16, 1);
+
+  VkImageMemoryBarrier2 ssrToRead = {
+      .sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2,
+      .srcStageMask = VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT,
+      .srcAccessMask = VK_ACCESS_2_SHADER_STORAGE_WRITE_BIT,
       .dstStageMask = VK_PIPELINE_STAGE_2_FRAGMENT_SHADER_BIT,
       .dstAccessMask = VK_ACCESS_2_SHADER_READ_BIT,
-      .oldLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
+      .oldLayout = VK_IMAGE_LAYOUT_GENERAL,
       .newLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
       .srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
       .dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
-      .image = grab.image,
+      .image = ssrTarget.image,
       .subresourceRange = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1}};
-  VkDependencyInfo depGrabRead = {.sType = VK_STRUCTURE_TYPE_DEPENDENCY_INFO,
-                                  .imageMemoryBarrierCount = 1,
-                                  .pImageMemoryBarriers = &grabToRead};
-  vkCmdPipelineBarrier2(cmd, &depGrabRead);
+  VkDependencyInfo depSsrR = {.sType = VK_STRUCTURE_TYPE_DEPENDENCY_INFO,
+                              .imageMemoryBarrierCount = 1,
+                              .pImageMemoryBarriers = &ssrToRead};
+  vkCmdPipelineBarrier2(cmd, &depSsrR);
 
+  // ---- Pass B: sky + opaque-comp + transparent -> swapchain ----
   VkImageMemoryBarrier2 toRenderable[2] = {
       {
           .sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2,
@@ -238,7 +326,7 @@ void recordFrame(VkCommandBuffer cmd, GraphicsPipelines pipelines,
       .sType = VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO,
       .imageView = depthView,
       .imageLayout = VK_IMAGE_LAYOUT_DEPTH_ATTACHMENT_OPTIMAL,
-      .loadOp = VK_ATTACHMENT_LOAD_OP_LOAD,
+      .loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR,
       .storeOp = VK_ATTACHMENT_STORE_OP_DONT_CARE,
       .clearValue = {.depthStencil = {1.0f, 0}},
   };
@@ -256,14 +344,44 @@ void recordFrame(VkCommandBuffer cmd, GraphicsPipelines pipelines,
   vkCmdSetScissor(cmd, 0, 1, &scissor);
 
   vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS,
-                    pipelines.compose_grab.pipeline);
-
-  VkDescriptorSet composeGrabSet =
+                    pipelines.sky.pipeline);
+  VkDescriptorSet skySet =
       descriptors.get(frameIndex, descriptors.textureCount - 1);
   vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS,
-                          pipelines.compose_grab.layout, 0, 1, &composeGrabSet,
-                          0, nullptr);
+                          pipelines.sky.layout, 0, 1, &skySet, 0, nullptr);
   vkCmdDraw(cmd, 3, 1, 0, 0);
+
+  vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS,
+                    pipelines.opaqueComp.pipeline);
+
+  for (size_t i = 0; i < objects.size(); ++i) {
+    const RenderObject &object = objects[i];
+    if (object.material.kind != MaterialKind::Opaque) {
+      continue;
+    }
+
+    uint32_t texIdx = object.material.texture.index;
+    if (texIdx >= descriptors.textureCount)
+      texIdx = 0;
+    uint32_t envIdx =
+        nearestProbe(objectCenter(object), probes, descriptors.envCount);
+    VkDescriptorSet set = descriptors.get(frameIndex, texIdx, envIdx);
+    vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS,
+                            pipelines.opaqueComp.layout, 0, 1, &set, 0,
+                            nullptr);
+
+    VkDeviceSize offset = 0;
+    vkCmdBindVertexBuffers(cmd, 0, 1, &object.vbuf.buffer, &offset);
+    vkCmdBindIndexBuffer(cmd, object.ibuf.buffer, 0, object.indexType);
+
+    PushConstants pc{.model = object.worldMat,
+                     .materialIdx = static_cast<uint32_t>(i)};
+    vkCmdPushConstants(cmd, pipelines.opaqueComp.layout,
+                       VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(PushConstants),
+                       &pc);
+
+    vkCmdDrawIndexed(cmd, object.indexCount, 1, 0, 0, 0);
+  }
 
   vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS,
                     pipelines.transparent.pipeline);

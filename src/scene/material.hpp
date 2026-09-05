@@ -13,4 +13,6 @@ struct Material {
   Vec4 baseColorFactor{1.0f, 1.0f, 1.0f, 1.0f};
   bool doubleSided = false;
   MaterialKind kind = MaterialKind::Opaque;
+  float metallicFactor = 0.0f;
+  float roughnessFactor = 1.0f;
 };

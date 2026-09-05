@@ -9,6 +9,7 @@
 #include <vector>
 
 #define MAX_ENVS 16
+#define MAX_PROBE_BOXES 16
 
 // TODO: Instead of `createX` we should have constructors
 
@@ -52,11 +53,13 @@ LightUniformBuffer createLightUniformBuffer(Device device);
 struct MaterialData {
   Vec4 baseColor;
 
-  // Maybe move this to transparent-specific descriptor?
   float thickness;
   float ior;
 
-  float _pad[2];
+  float metallic;
+  float roughness;
+
+  Mat4 cubeInv;
 };
 
 struct MaterialsBlock {
@@ -89,7 +92,7 @@ struct DepthBuffer {
 VkFormat findDepthFormat(VkPhysicalDevice physical);
 
 DepthBuffer createDepthBuffer(Device device, VkFormat format, uint32_t width,
-                              uint32_t height);
+                              uint32_t height, bool sampled = false);
 
 struct SceneGrab {
   VkImage image;
@@ -99,6 +102,54 @@ struct SceneGrab {
 
 SceneGrab createSceneGrab(Device device, VkFormat format, uint32_t width,
                           uint32_t height);
+
+#define GRAB_NORMAL_FORMAT VK_FORMAT_R16G16B16A16_SFLOAT
+SceneGrab createFloatTarget(Device device, VkFormat format, uint32_t width,
+                            uint32_t height);
+
+#define SSR_FORMAT VK_FORMAT_R16G16B16A16_SFLOAT
+struct SsrTarget {
+  VkImage image;
+  VkDeviceMemory memory;
+  VkImageView view;
+};
+
+SsrTarget createSsrTarget(Device device, uint32_t width, uint32_t height);
+
+#define SSR_MAXDIST 6.0f
+#define SSR_THICKNESS 0.03f
+#define SSR_STEPS 24
+#define SSR_REFINE 6
+
+struct SsrData {
+  Mat4 viewProj;
+  Mat4 invViewProj;
+  Mat4 view;
+  Vec4 camPos;
+  Vec4 march; // maxDist, thickness, steps, refine
+};
+
+struct SsrUniformBuffer {
+  VkBuffer buffer;
+  VkDeviceMemory memory;
+  SsrData *mapped;
+};
+
+SsrUniformBuffer createSsrUniformBuffer(Device device);
+
+struct ProbeData {
+  Vec4 probe;
+  uint32_t count = 0;
+  float _pad[3] = {};
+};
+
+struct ProbeUniformBuffer {
+  VkBuffer buffer;
+  VkDeviceMemory memory;
+  ProbeData *mapped;
+};
+
+ProbeUniformBuffer createProbeUniformBuffer(Device device);
 
 struct EnvCube {
   VkImage image;
@@ -116,6 +167,7 @@ struct SceneDescriptors {
   std::vector<VkDescriptorSet> sets;
   uint32_t textureCount = 0;
   uint32_t envCount = 0;
+  std::vector<VkDescriptorSet> bakeSets;
 
   VkDescriptorSet get(uint32_t frame, uint32_t texIdx,
                       uint32_t envIdx = 0) const {
@@ -123,13 +175,21 @@ struct SceneDescriptors {
   }
 };
 
-SceneDescriptors
-createSceneDescriptors(VkDevice device, const std::vector<Texture> &textures,
-                       CameraUniformBuffer *cameras, LightUniformBuffer *lights,
-                       MaterialUniformBuffer *materials, VkSampler sceneSampler,
-                       VkImageView sceneView, VkSampler envSampler,
-                       std::span<const VkImageView> envViews);
+SceneDescriptors createSceneDescriptors(
+    VkDevice device, const std::vector<Texture> &textures,
+    CameraUniformBuffer *cameras, LightUniformBuffer *lights,
+    MaterialUniformBuffer *materials, SsrUniformBuffer *ssrUbos,
+    std::span<const ProbeUniformBuffer> probes,
+    const CameraUniformBuffer &bakeCamera, const LightUniformBuffer &bakeLights,
+    const MaterialUniformBuffer &bakeMaterials, VkSampler sceneSampler,
+    VkImageView sceneView, VkSampler envSampler,
+    std::span<const VkImageView> envViews, VkSampler grabSampler,
+    VkImageView normalView, VkSampler depthSampler, VkImageView depthView,
+    VkSampler ssrSampler, VkImageView ssrView);
 
-void updateSceneGrabDescriptors(VkDevice device,
+void updateSsrResizeDescriptors(VkDevice device,
                                 const SceneDescriptors &descriptors,
+                                VkSampler grabSampler, VkImageView normalView,
+                                VkSampler depthSampler, VkImageView depthView,
+                                VkSampler ssrSampler, VkImageView ssrView,
                                 VkSampler sceneSampler, VkImageView sceneView);

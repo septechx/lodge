@@ -1,10 +1,8 @@
 #version 450
 
-const float PI = 3.14159265;
-
 struct MaterialData {
     vec4 baseColor;
-    float thickness; 
+    float thickness;
     float ior;
     float metallic;
     float roughness;
@@ -12,6 +10,10 @@ struct MaterialData {
 };
 
 layout(binding = 0) uniform sampler2D texSampler;
+layout(binding = 1) uniform CameraData {
+    mat4 viewProj;
+    vec3 viewPos;
+} camera;
 layout(binding = 2) uniform LightData {
     vec3 lightPos;
     vec3 lightColor;
@@ -70,62 +72,44 @@ vec3 fallbackReflection(vec3 P, vec3 R) {
 }
 
 void main() {
-    MaterialData material = materials.data[materialIdx];
-
     vec4 sampled = texture(texSampler, fragUV);
-    vec4 base = sampled * material.baseColor;
-    vec3 albedo = base.rgb;
-    float metallic = clamp(material.metallic, 0.0, 1.0);
-    float roughness = clamp(material.roughness, 0.04, 1.0);
+    vec4 base = sampled * materials.data[materialIdx].baseColor;
 
+    if (base.a < 0.5) discard;
+
+    vec3 baseRgb = base.rgb;
     vec3 N = normalize(fragNormal);
-    vec3 V = normalize(viewPos - fragPos);
-    vec3 L = normalize(lightData.lightPos - fragPos);
-    float NdotL = clamp(dot(N, L), 0.0, 1.0);
-    float NdotV = clamp(dot(N, V), 0.0, 1.0);
-    vec3 H = normalize(V + L);
-    float NdotH = clamp(dot(N, H), 0.0, 1.0);
-    float VdotH = clamp(dot(V, H), 0.0, 1.0);
+    vec3 lightDir = normalize(lightData.lightPos - fragPos);
+    float diff = max(dot(N, lightDir), 0.0);
+    vec3 diffuse = diff * lightData.lightColor;
 
-    float F0diel = pow((material.ior - 1.0) / (material.ior + 1.0), 2.0);
-    vec3 F0 = mix(vec3(F0diel), albedo, metallic);
+    float specularStrength = 0.5;
+    vec3 viewDir = normalize(viewPos - fragPos);
+    vec3 reflectDir = reflect(-lightDir, N);
+    float spec = pow(max(dot(viewDir, reflectDir), 0.0), 32);
+    vec3 specular = specularStrength * spec * lightData.lightColor;
 
-    float a = roughness * roughness;
-    float a2 = a * a;
-    float denom = NdotH * NdotH * (a2 - 1.0) + 1.0;
-    float D = a2 / (PI * denom * denom);
-    float k = (roughness + 1.0) * (roughness + 1.0) / 8.0;
-    float Gv = NdotV / (NdotV * (1.0 - k) + k);
-    float Gl = NdotL / (NdotL * (1.0 - k) + k);
-    float G = Gv * Gl;
-    vec3 F = F0 + (1.0 - F0) * pow(1.0 - VdotH, 5.0);
-    vec3 specDirect = D * G * F / max(4.0 * NdotV * NdotL, 1e-4);
-    vec3 diffDirect = (1.0 - F) * (1.0 - metallic) * albedo / PI;
-    vec3 direct = (diffDirect + specDirect) * lightData.lightColor * NdotL;
+    float ambient = 0.10;
+    vec3 lit = (ambient + diffuse + specular) * baseRgb;
 
-    ivec2 grabSize = textureSize(sceneSampler, 0);
-    vec2 screenUv = gl_FragCoord.xy / vec2(grabSize);
-    vec3 transmitted = texture(sceneSampler, screenUv).rgb;
-    vec3 sigma = clamp(1.0 - albedo, 0.0, 1.0) * 8.0;
-    transmitted *= exp(-sigma * material.thickness);
-    vec3 Fibl = F0 + (1.0 - F0) * pow(1.0 - NdotV, 5.0);
-    vec3 transContrib = transmitted * (1.0 - Fibl) * (1.0 - metallic);
+    vec3 V = normalize(fragPos - viewPos);
+    float cosI = clamp(dot(-V, N), 0.0, 1.0);
+    float F = 0.04 + 0.96 * pow(1.0 - cosI, 5.0);
 
-    vec3 R = reflect(-V, N);
-    vec3 probeTex = fallbackReflection(fragPos, R);
     ivec2 ssrSize = textureSize(ssrResolve, 0);
     vec2 suv = gl_FragCoord.xy / vec2(ssrSize);
     vec4 ssr = texture(ssrResolve, suv);
-    vec3 indirect;
+    vec3 refl;
+    float w;
     if (ssr.z > 0.5) {
-        vec3 ssrHit = texture(sceneSampler, ssr.xy).rgb;
-        indirect = mix(probeTex, ssrHit, (1.0 - roughness) * ssr.w);
+        refl = texture(sceneSampler, ssr.xy).rgb;
+        w = ssr.w;
     } else {
-        indirect = probeTex;
+        vec3 R = reflect(V, N);
+        refl = fallbackReflection(fragPos, R);
+        w = 1.0;
     }
-    vec3 specIbl = indirect * Fibl;
 
-    vec3 color = transContrib + direct + specIbl;
-
+    vec3 color = mix(lit, refl, clamp(F * w, 0.0, 1.0));
     outColor = vec4(color, 1.0);
 }

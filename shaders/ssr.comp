@@ -1,0 +1,95 @@
+#version 450
+
+layout(local_size_x = 16, local_size_y = 16, local_size_z = 1) in;
+
+layout(binding = 6) uniform sampler2D grabNormal;
+layout(binding = 7) uniform sampler2D grabDepth;
+layout(binding = 9, rgba16f) uniform writeonly image2D ssrOut;
+
+layout(binding = 10) uniform SsrParams {
+    mat4 viewProj;
+    mat4 invViewProj;
+    mat4 view;
+    vec4 camPos;
+    vec4 march; // x = maxDist, y = thickness, z = steps, w = refine
+} sp;
+
+float viewDepth(vec3 p) { return -(sp.view * vec4(p, 1.0)).z; }
+
+bool projectGap(vec3 q, out vec2 quv, out float gap) {
+    vec4 c = sp.viewProj * vec4(q, 1.0);
+    if (c.w <= 0.0)
+        return false;
+    vec3 ndc = c.xyz / c.w;
+    quv = ndc.xy * 0.5 + 0.5;
+    if (quv.x < 0.0 || quv.x > 1.0 || quv.y < 0.0 || quv.y > 1.0)
+        return false;
+    float sd = texture(grabDepth, quv).x;
+    vec4 sw = sp.invViewProj * vec4(quv * 2.0 - 1.0, sd, 1.0);
+    sw.xyz /= sw.w;
+    gap = viewDepth(q) - viewDepth(sw.xyz);
+    return true;
+}
+
+void main() {
+    ivec2 px = ivec2(gl_GlobalInvocationID.xy);
+    ivec2 sz = imageSize(ssrOut);
+    if (px.x >= sz.x || px.y >= sz.y)
+        return;
+    vec2 uv0 = (vec2(px) + 0.5) / vec2(sz);
+    float d0 = texture(grabDepth, uv0).x;
+    if (d0 >= 1.0 - 1e-6) {
+        imageStore(ssrOut, px, vec4(0.0));
+        return;
+    }
+    vec4 w4 = sp.invViewProj * vec4(uv0 * 2.0 - 1.0, d0, 1.0);
+    vec3 P = w4.xyz / w4.w;
+    vec3 N = normalize(texture(grabNormal, uv0).xyz * 2.0 - 1.0);
+    vec3 V = normalize(P - sp.camPos.xyz);
+    vec3 R = reflect(V, N);
+    float dt = sp.march.x / sp.march.z;
+    float tMiss = 0.0;
+    float t = 0.0;
+    float gapPrev = -1e-6;
+    vec2 hitUv = vec2(0.0);
+    bool done = false;
+    for (int i = 0; i < int(sp.march.z) + 1 && !done; ++i) {
+        t = dt * float(i + 1);
+        if (t > sp.march.x)
+            break;
+        vec2 quv;
+        float gap;
+        if (!projectGap(P + R * t, quv, gap))
+            break;
+        if (gap > 0.0 && gap < sp.march.y) {
+            hitUv = quv;
+            done = true;
+        } else if (gap > 0.0 && gapPrev < 0.0) {
+            int refine = int(sp.march.w + 0.5);
+            refine = clamp(refine, 1, 32);
+            for (int k = 1; k <= refine && !done; ++k) {
+                float tm = tMiss + (t - tMiss) * float(k) / float(refine);
+                vec2 muv;
+                float mgap;
+                if (!projectGap(P + R * tm, muv, mgap))
+                    continue;
+                if (mgap > 0.0 && mgap < sp.march.y) {
+                    hitUv = muv;
+                    done = true;
+                }
+            }
+            gapPrev = -1e-6;
+        } else {
+            if (gap <= 0.0)
+                tMiss = t;
+            gapPrev = gap;
+        }
+    }
+    if (!done) {
+        imageStore(ssrOut, px, vec4(0.0));
+        return;
+    }
+    vec2 e = min(hitUv, 1.0 - hitUv);
+    float conf = clamp(min(e.x, e.y) / 0.08, 0.0, 1.0);
+    imageStore(ssrOut, px, vec4(hitUv, 1.0, conf));
+}

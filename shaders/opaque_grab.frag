@@ -25,6 +25,7 @@ layout(location = 3) flat in vec3 viewPos;
 layout(location = 4) flat in uint materialIdx;
 
 layout(location = 0) out vec4 outColor;
+layout(location = 1) out vec4 outNormal;
 
 void main() {
     vec4 sampled = texture(texSampler, fragUV);
@@ -49,4 +50,5 @@ void main() {
     vec3 result = (ambient + diffuse + specular) * baseRgb;
 
     outColor = vec4(result, base.a);
+    outNormal = vec4(norm * 0.5 + 0.5, 1.0);
 }
