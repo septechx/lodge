@@ -55,12 +55,14 @@ private:
   CameraUniformBuffer m_cameraUniforms[MAX_FRAMES_IN_FLIGHT];
   LightUniformBuffer m_lights[MAX_FRAMES_IN_FLIGHT];
   MaterialUniformBuffer m_materials[MAX_FRAMES_IN_FLIGHT];
+  ObjectUniformBuffer m_objects[MAX_FRAMES_IN_FLIGHT];
   SsrUniformBuffer m_ssrUbos[MAX_FRAMES_IN_FLIGHT];
   std::vector<ProbeUniformBuffer> m_probeBoxes;
   CameraUniformBuffer m_bakeCamera;
   LightUniformBuffer m_bakeLights;
   MaterialUniformBuffer m_bakeMaterials;
-  SceneDescriptors m_desc;
+  ObjectUniformBuffer m_bakeObjects;
+  SplitDescriptors m_sets;
   GraphicsPipelines m_pipelines;
   ComputePipeline m_ssrPipeline;
   DepthBuffer m_bakeDepth;

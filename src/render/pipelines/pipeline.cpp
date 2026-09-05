@@ -8,8 +8,8 @@
 #include <cstdint>
 #include <filesystem>
 
-static void loadShader(VkDevice device, const std::filesystem::path path,
-                       VkShaderModule &module) {
+void loadShader(VkDevice device, const std::filesystem::path path,
+                VkShaderModule &module) {
   if (auto spir = readFileToString(path); spir.has_value()) {
     VkShaderModuleCreateInfo sci = {
         .sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO,

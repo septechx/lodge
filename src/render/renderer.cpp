@@ -5,6 +5,7 @@
 #include "src/render/bake.hpp"
 #include "src/render/cube.hpp"
 #include "src/render/init.hpp"
+#include "src/render/material_store.hpp"
 #include "src/render/pipelines/opaque.hpp"
 #include "src/render/pipelines/sky.hpp"
 #include "src/render/pipelines/ssr.hpp"
@@ -19,6 +20,7 @@
 
 #include <algorithm>
 #include <cstring>
+#include <span>
 #include <vector>
 
 static Mat4 cubeInvForFallback(const Mat4 &worldMat) {
@@ -32,6 +34,33 @@ static Mat4 cubeInvForFallback(const Mat4 &worldMat) {
     return Mat4::IDENTITY;
   }
   return worldMat.inverse();
+}
+
+static void writeMaterialAndObjects(MaterialUniformBuffer &matUbo,
+                                    ObjectUniformBuffer &objUbo,
+                                    std::span<const RenderObject> objects) {
+  LDG_ASSERT(objects.size() <= MAX_MATERIALS);
+  MaterialStore store;
+  for (size_t i = 0; i < objects.size(); ++i) {
+    uint32_t id = store.intern(objects[i].material);
+    LDG_ASSERT(store.size() <= MAX_MATERIALS);
+    const Material &m = store.at(id);
+    MaterialData &dst = matUbo.mapped->data[id];
+    if (m.kind == MaterialKind::Transparent) {
+      dst.thickness = 0.09f;
+      dst.ior = 1.52f;
+    } else {
+      dst.thickness = 0.0f;
+      dst.ior = 1.0f;
+    }
+    dst.baseColor = m.baseColorFactor;
+    dst.metallic = m.metallicFactor;
+    dst.roughness = m.roughnessFactor;
+
+    ObjectData &obj = objUbo.mapped->data[i];
+    obj.cubeInv = cubeInvForFallback(objects[i].worldMat);
+    obj.materialId = id;
+  }
 }
 
 Renderer::Renderer(GLFWwindow &window) : m_window(window) {
@@ -135,11 +164,13 @@ void Renderer::initScene(const AssetStore &assets, const FrameScene &frame) {
     m_cameraUniforms[i] = createCameraUniformBuffer(m_dev);
     m_lights[i] = createLightUniformBuffer(m_dev);
     m_materials[i] = createMaterialUniformBuffer(m_dev);
+    m_objects[i] = createObjectUniformBuffer(m_dev);
     m_ssrUbos[i] = createSsrUniformBuffer(m_dev);
   }
   m_bakeCamera = createCameraUniformBuffer(m_dev);
   m_bakeLights = createLightUniformBuffer(m_dev);
   m_bakeMaterials = createMaterialUniformBuffer(m_dev);
+  m_bakeObjects = createObjectUniformBuffer(m_dev);
 
   m_probes.clear();
   for (const RenderObject &object : frame.objects) {
@@ -181,12 +212,12 @@ void Renderer::initScene(const AssetStore &assets, const FrameScene &frame) {
     m_probeBoxes.back().mapped->count = boxCount;
   }
 
-  m_desc = createSceneDescriptors(
+  m_sets = createSplitDescriptors(
       m_dev.device, assets.textures(), m_cameraUniforms, m_lights, m_materials,
-      m_ssrUbos, m_probeBoxes, m_bakeCamera, m_bakeLights, m_bakeMaterials,
-      m_grabSampler, m_grab.view, m_envSampler, envViews, m_grabSampler,
-      m_grabNormal.view, m_depthSampler, m_grabDepth.view, m_ssrSampler,
-      m_ssr.view);
+      m_objects, m_ssrUbos, m_probeBoxes, m_bakeCamera, m_bakeLights,
+      m_bakeMaterials, m_bakeObjects, m_grabSampler, m_grab.view, m_envSampler,
+      envViews, m_grabSampler, m_grabNormal.view, m_depthSampler,
+      m_grabDepth.view, m_ssrSampler, m_ssr.view);
 
   if (!frame.lights.empty()) {
     LightData ld{.lightPos = frame.lights.front().pos,
@@ -199,45 +230,35 @@ void Renderer::initScene(const AssetStore &assets, const FrameScene &frame) {
     for (int f = 0; f < MAX_FRAMES_IN_FLIGHT; ++f)
       memcpy(m_lights[f].mapped, &ld, sizeof(LightData));
   }
-  auto writeMaterials = [&](int f) {
-    for (size_t i = 0; i < frame.objects.size(); ++i) {
-      const Material &mat = frame.objects[i].material;
-      MaterialData &dst = m_materials[f].mapped->data[i];
-      if (mat.kind == MaterialKind::Transparent) {
-        dst.thickness = 0.09f;
-        dst.ior = 1.52f;
-      } else {
-        dst.thickness = 0.0f;
-        dst.ior = 1.0f;
-      }
-      dst.baseColor = mat.baseColorFactor;
-      dst.metallic = mat.metallicFactor;
-      dst.roughness = mat.roughnessFactor;
-      dst.cubeInv = cubeInvForFallback(frame.objects[i].worldMat);
-    }
-  };
   for (int f = 0; f < MAX_FRAMES_IN_FLIGHT; ++f)
-    writeMaterials(f);
+    writeMaterialAndObjects(m_materials[f], m_objects[f], frame.objects);
   memcpy(m_bakeLights.mapped, m_lights[0].mapped, sizeof(LightData));
   memcpy(m_bakeMaterials.mapped, m_materials[0].mapped, sizeof(MaterialsBlock));
+  memcpy(m_bakeObjects.mapped, m_objects[0].mapped, sizeof(ObjectsBlock));
 
+  VkDescriptorSetLayout frameMaterial[2] = {m_sets.frame.layout,
+                                            m_sets.material.layout};
+  VkDescriptorSetLayout frameOnly[1] = {m_sets.frame.layout};
+  VkDescriptorSetLayout full[4] = {m_sets.frame.layout, m_sets.material.layout,
+                                   m_sets.env.layout, m_sets.pass.layout};
   m_pipelines = {
       .opaque = createOpaquePipeline(m_dev.device, m_sc.format, m_depthFormat,
-                                     m_sc.extent, m_desc.layout),
+                                     frameMaterial),
       .opaqueGrab = createOpaqueGrabPipeline(m_dev.device, m_sc.format,
                                              GRAB_NORMAL_FORMAT, m_depthFormat,
-                                             m_sc.extent, m_desc.layout),
-      .opaqueComp = createOpaqueCompPipeline(
-          m_dev.device, m_sc.format, m_depthFormat, m_sc.extent, m_desc.layout),
-      .transparent = createTransparentPipeline(
-          m_dev.device, m_sc.format, m_depthFormat, m_sc.extent, m_desc.layout),
+                                             frameMaterial),
+      .opaqueComp = createOpaqueCompPipeline(m_dev.device, m_sc.format,
+                                             m_depthFormat, full),
+      .transparent = createTransparentPipeline(m_dev.device, m_sc.format,
+                                               m_depthFormat, full),
       .sky = createSkyPipeline(m_dev.device, m_sc.format, m_depthFormat,
-                               m_sc.extent, m_desc.layout),
+                               frameOnly),
       .skyGrab =
           createSkyGrabPipeline(m_dev.device, m_sc.format, GRAB_NORMAL_FORMAT,
-                                m_depthFormat, m_sc.extent, m_desc.layout),
+                                m_depthFormat, frameOnly),
   };
-  m_ssrPipeline = createSsrPipeline(m_dev.device, m_desc.layout);
+  m_ssrPipeline =
+      createSsrPipeline(m_dev.device, m_sets.frame.layout, m_sets.pass.layout);
 
   m_bakeDepth =
       createDepthBuffer(m_dev, m_depthFormat, CUBE_SIZE, CUBE_SIZE, false);
@@ -246,7 +267,7 @@ void Renderer::initScene(const AssetStore &assets, const FrameScene &frame) {
   CHECK_VK(vkCreateFence(m_dev.device, &bfci, nullptr, &m_bakeFence),
            "create bake fence");
 
-  bakeEnvironment(m_dev, m_pipelines, frame.objects, m_desc, m_envs, m_probes,
+  bakeEnvironment(m_dev, m_pipelines, frame.objects, m_sets, m_envs, m_probes,
                   m_bakeCamera, m_bakeDepth, m_bakeCmd, m_bakeFence);
 
   m_sceneInitialized = true;
@@ -310,8 +331,8 @@ void Renderer::recreateSwapchain() {
   m_grabDepth = createDepthBuffer(m_dev, m_depthFormat, m_sc.extent.width,
                                   m_sc.extent.height, true);
   m_ssr = createSsrTarget(m_dev, m_sc.extent.width, m_sc.extent.height);
-  updateSsrResizeDescriptors(
-      m_dev.device, m_desc, m_grabSampler, m_grabNormal.view, m_depthSampler,
+  updatePassResizeDescriptors(
+      m_dev.device, m_sets, m_grabSampler, m_grabNormal.view, m_depthSampler,
       m_grabDepth.view, m_ssrSampler, m_ssr.view, m_grabSampler, m_grab.view);
 
   if (ImGui::GetCurrentContext() != nullptr) {
@@ -376,23 +397,8 @@ void Renderer::drawFrame(const FrameScene &frame) {
     memcpy(m_lights[m_frame].mapped, &lightData, sizeof(LightData));
   }
 
-  // TODO: Dedup materials
-  LDG_ASSERT(frame.objects.size() <= MAX_MATERIALS);
-  for (size_t i = 0; i < frame.objects.size(); ++i) {
-    const Material &mat = frame.objects[i].material;
-    MaterialData &dst = m_materials[m_frame].mapped->data[i];
-    if (mat.kind == MaterialKind::Transparent) {
-      dst.thickness = 0.09f;
-      dst.ior = 1.52f;
-    } else {
-      dst.thickness = 0.0f;
-      dst.ior = 1.0f;
-    }
-    dst.baseColor = mat.baseColorFactor;
-    dst.metallic = mat.metallicFactor;
-    dst.roughness = mat.roughnessFactor;
-    dst.cubeInv = cubeInvForFallback(frame.objects[i].worldMat);
-  }
+  writeMaterialAndObjects(m_materials[m_frame], m_objects[m_frame],
+                          frame.objects);
 
   uint32_t boxCount = static_cast<uint32_t>(
       std::min<size_t>(frame.objects.size(), MAX_PROBE_BOXES));
@@ -408,12 +414,23 @@ void Renderer::drawFrame(const FrameScene &frame) {
     }
   }
 
+  FrameContext frameCtx{
+      .descriptors = &m_sets,
+      .frameIndex = static_cast<uint32_t>(m_frame),
+      .probes = m_probes,
+      .image = m_sc.images[imageIndex],
+      .view = m_sc.views[imageIndex],
+      .depthImage = m_depths[imageIndex].image,
+      .depthView = m_depths[imageIndex].view,
+      .grab = m_grab,
+      .grabNormal = m_grabNormal,
+      .grabDepthImage = m_grabDepth.image,
+      .grabDepthView = m_grabDepth.view,
+      .ssrTarget = m_ssr,
+      .extent = m_sc.extent,
+  };
   recordFrame(m_cmd[m_frame].cmd, m_pipelines, m_ssrPipeline, frame.objects,
-              m_desc, static_cast<uint32_t>(m_frame), m_probes,
-              m_sc.images[imageIndex], m_sc.views[imageIndex],
-              m_depths[imageIndex].image, m_depths[imageIndex].view, m_grab,
-              m_grabNormal, m_grabDepth.image, m_grabDepth.view, m_ssr,
-              m_sc.extent, drawData);
+              frameCtx, drawData);
 
   VkPipelineStageFlags waitStage =
       VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
@@ -455,10 +472,11 @@ void Renderer::drawFrame(const FrameScene &frame) {
       const LightData *freshLight =
           frame.lights.empty() ? nullptr : m_lights[m_frame].mapped;
       bool submitted = tryBakeOneFaceAsync(
-          m_dev, m_pipelines, frame.objects, m_desc, m_envs[envIdx],
+          m_dev, m_pipelines, frame.objects, m_sets, m_envs[envIdx],
           m_probes[envIdx], face, m_bakeCamera, m_bakeLights, m_bakeMaterials,
-          freshLight, m_materials[m_frame].mapped, m_bakeDepth, m_bakeCmd,
-          m_bakeFence, m_bakePending);
+          m_bakeObjects, freshLight, m_materials[m_frame].mapped,
+          m_objects[m_frame].mapped, m_bakeDepth, m_bakeCmd, m_bakeFence,
+          m_bakePending);
       if (submitted) {
         m_rebakeNext++;
       }
@@ -491,8 +509,7 @@ Renderer::~Renderer() {
   m_envs.clear();
 
   if (m_sceneInitialized) {
-    vkDestroyDescriptorPool(device, m_desc.pool, nullptr);
-    vkDestroyDescriptorSetLayout(device, m_desc.layout, nullptr);
+    destroySplitDescriptors(device, m_sets);
 
     vkDestroyPipeline(device, m_pipelines.opaque.pipeline, nullptr);
     vkDestroyPipelineLayout(device, m_pipelines.opaque.layout, nullptr);
@@ -529,6 +546,10 @@ Renderer::~Renderer() {
     vkDestroyBuffer(device, m_bakeMaterials.buffer, nullptr);
     vkFreeMemory(device, m_bakeMaterials.memory, nullptr);
 
+    vkUnmapMemory(device, m_bakeObjects.memory);
+    vkDestroyBuffer(device, m_bakeObjects.buffer, nullptr);
+    vkFreeMemory(device, m_bakeObjects.memory, nullptr);
+
     for (auto &probe : m_probeBoxes) {
       vkUnmapMemory(device, probe.memory);
       vkDestroyBuffer(device, probe.buffer, nullptr);
@@ -548,6 +569,10 @@ Renderer::~Renderer() {
       vkUnmapMemory(device, m_materials[i].memory);
       vkDestroyBuffer(device, m_materials[i].buffer, nullptr);
       vkFreeMemory(device, m_materials[i].memory, nullptr);
+
+      vkUnmapMemory(device, m_objects[i].memory);
+      vkDestroyBuffer(device, m_objects[i].buffer, nullptr);
+      vkFreeMemory(device, m_objects[i].memory, nullptr);
 
       vkUnmapMemory(device, m_ssrUbos[i].memory);
       vkDestroyBuffer(device, m_ssrUbos[i].buffer, nullptr);

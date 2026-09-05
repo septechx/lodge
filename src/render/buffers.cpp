@@ -75,6 +75,19 @@ MaterialUniformBuffer createMaterialUniformBuffer(Device device) {
                                static_cast<MaterialsBlock *>(mapped)};
 }
 
+ObjectUniformBuffer createObjectUniformBuffer(Device device) {
+  AllocatedBuffer buf = createBuffer(device, sizeof(ObjectsBlock),
+                                     VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT,
+                                     VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT |
+                                         VK_MEMORY_PROPERTY_HOST_COHERENT_BIT);
+  void *mapped = nullptr;
+  CHECK_VK(vkMapMemory(device.device, buf.memory, 0, sizeof(ObjectsBlock), 0,
+                       &mapped),
+           "map object uniform");
+  return ObjectUniformBuffer{buf.buffer, buf.memory,
+                             static_cast<ObjectsBlock *>(mapped)};
+}
+
 VkFormat findDepthFormat(VkPhysicalDevice physical) {
   static const VkFormat candidates[] = {
       VK_FORMAT_D32_SFLOAT,
@@ -251,13 +264,14 @@ void destroyEnvCube(VkDevice device, EnvCube &env) {
   env = EnvCube{};
 }
 
-SceneDescriptors createSceneDescriptors(
+SplitDescriptors createSplitDescriptors(
     VkDevice device, const std::vector<Texture> &textures,
     CameraUniformBuffer *cameras, LightUniformBuffer *lights,
-    MaterialUniformBuffer *materials, SsrUniformBuffer *ssrUbos,
-    std::span<const ProbeUniformBuffer> probes,
+    MaterialUniformBuffer *materials, ObjectUniformBuffer *objects,
+    SsrUniformBuffer *ssrUbos, std::span<const ProbeUniformBuffer> probes,
     const CameraUniformBuffer &bakeCamera, const LightUniformBuffer &bakeLights,
-    const MaterialUniformBuffer &bakeMaterials, VkSampler sceneSampler,
+    const MaterialUniformBuffer &bakeMaterials,
+    const ObjectUniformBuffer &bakeObjects, VkSampler sceneSampler,
     VkImageView sceneView, VkSampler envSampler,
     std::span<const VkImageView> envViews, VkSampler grabSampler,
     VkImageView normalView, VkSampler depthSampler, VkImageView depthView,
@@ -266,7 +280,37 @@ SceneDescriptors createSceneDescriptors(
   LDG_ASSERT(!envViews.empty());
   LDG_ASSERT(probes.size() == envViews.size());
 
-  VkDescriptorSetLayoutBinding bindings[12] = {
+  // Set 0 Frame: camera b0, light b1, ssrParams b2, objects b3
+  VkDescriptorSetLayoutBinding frameBindings[4] = {
+      {.binding = 0,
+       .descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,
+       .descriptorCount = 1,
+       .stageFlags = VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT},
+      {.binding = 1,
+       .descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,
+       .descriptorCount = 1,
+       .stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT},
+      {.binding = 2,
+       .descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,
+       .descriptorCount = 1,
+       .stageFlags = VK_SHADER_STAGE_COMPUTE_BIT},
+      {.binding = 3,
+       .descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,
+       .descriptorCount = 1,
+       .stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT},
+  };
+  VkDescriptorSetLayoutCreateInfo frameLci = {
+      .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO,
+      .bindingCount = 4,
+      .pBindings = frameBindings,
+  };
+  VkDescriptorSetLayout frameLayout;
+  CHECK_VK(
+      vkCreateDescriptorSetLayout(device, &frameLci, nullptr, &frameLayout),
+      "create frame set layout");
+
+  // Set 1 Material: texture b0, materials b1
+  VkDescriptorSetLayoutBinding materialBindings[2] = {
       {.binding = 0,
        .descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
        .descriptorCount = 1,
@@ -274,157 +318,259 @@ SceneDescriptors createSceneDescriptors(
       {.binding = 1,
        .descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,
        .descriptorCount = 1,
-       .stageFlags = VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT},
-      {.binding = 2,
+       .stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT},
+  };
+  VkDescriptorSetLayoutCreateInfo materialLci = {
+      .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO,
+      .bindingCount = 2,
+      .pBindings = materialBindings,
+  };
+  VkDescriptorSetLayout materialLayout;
+  CHECK_VK(vkCreateDescriptorSetLayout(device, &materialLci, nullptr,
+                                       &materialLayout),
+           "create material set layout");
+
+  // Set 2 Env: cube b0, probe b1
+  VkDescriptorSetLayoutBinding envBindings[2] = {
+      {.binding = 0,
+       .descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
+       .descriptorCount = 1,
+       .stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT},
+      {.binding = 1,
        .descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,
        .descriptorCount = 1,
        .stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT},
+  };
+  VkDescriptorSetLayoutCreateInfo envLci = {
+      .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO,
+      .bindingCount = 2,
+      .pBindings = envBindings,
+  };
+  VkDescriptorSetLayout envLayout;
+  CHECK_VK(vkCreateDescriptorSetLayout(device, &envLci, nullptr, &envLayout),
+           "create env set layout");
+
+  // Set 3 Pass: scene b0, normal b1, depth b2, ssr sampled b3, ssr storage b4
+  VkDescriptorSetLayoutBinding passBindings[5] = {
+      {.binding = 0,
+       .descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
+       .descriptorCount = 1,
+       .stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT},
+      {.binding = 1,
+       .descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
+       .descriptorCount = 1,
+       .stageFlags = VK_SHADER_STAGE_COMPUTE_BIT},
+      {.binding = 2,
+       .descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
+       .descriptorCount = 1,
+       .stageFlags = VK_SHADER_STAGE_COMPUTE_BIT},
       {.binding = 3,
-       .descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,
+       .descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
        .descriptorCount = 1,
        .stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT},
       {.binding = 4,
-       .descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
-       .descriptorCount = 1,
-       .stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT},
-      {.binding = 5,
-       .descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
-       .descriptorCount = 1,
-       .stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT},
-      {.binding = 6,
-       .descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
-       .descriptorCount = 1,
-       .stageFlags = VK_SHADER_STAGE_COMPUTE_BIT},
-      {.binding = 7,
-       .descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
-       .descriptorCount = 1,
-       .stageFlags = VK_SHADER_STAGE_COMPUTE_BIT},
-      {.binding = 8,
-       .descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
-       .descriptorCount = 1,
-       .stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT},
-      {.binding = 9,
        .descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_IMAGE,
        .descriptorCount = 1,
        .stageFlags = VK_SHADER_STAGE_COMPUTE_BIT},
-      {.binding = 10,
-       .descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,
-       .descriptorCount = 1,
-       .stageFlags = VK_SHADER_STAGE_COMPUTE_BIT},
-      {.binding = 11,
-       .descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,
-       .descriptorCount = 1,
-       .stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT}};
-  VkDescriptorSetLayoutCreateInfo lci = {
-      .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO,
-      .bindingCount = 12,
-      .pBindings = bindings,
   };
-  VkDescriptorSetLayout setLayout;
-  CHECK_VK(vkCreateDescriptorSetLayout(device, &lci, nullptr, &setLayout),
-           "create set layout");
+  VkDescriptorSetLayoutCreateInfo passLci = {
+      .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO,
+      .bindingCount = 5,
+      .pBindings = passBindings,
+  };
+  VkDescriptorSetLayout passLayout;
+  CHECK_VK(vkCreateDescriptorSetLayout(device, &passLci, nullptr, &passLayout),
+           "create pass set layout");
 
   uint32_t textureCount = static_cast<uint32_t>(textures.size());
   uint32_t envCount = static_cast<uint32_t>(envViews.size());
-  uint32_t setCount = textureCount * envCount * MAX_FRAMES_IN_FLIGHT;
-  uint32_t bakeCount = textureCount;
-  uint32_t totalSets = setCount + bakeCount;
 
-  VkDescriptorPoolSize poolSizes[3] = {
-      {.type = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
-       .descriptorCount = totalSets * 6},
+  uint32_t frameSetCount = MAX_FRAMES_IN_FLIGHT + 1;
+  VkDescriptorPoolSize framePoolSizes[1] = {
       {.type = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,
-       .descriptorCount = totalSets * 5},
-      {.type = VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, .descriptorCount = totalSets},
+       .descriptorCount = frameSetCount * 4},
   };
-  VkDescriptorPoolCreateInfo pci = {
+  VkDescriptorPoolCreateInfo framePci = {
       .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO,
-      .maxSets = totalSets,
-      .poolSizeCount = 3,
-      .pPoolSizes = poolSizes,
+      .maxSets = frameSetCount,
+      .poolSizeCount = 1,
+      .pPoolSizes = framePoolSizes,
   };
-  VkDescriptorPool pool;
-  CHECK_VK(vkCreateDescriptorPool(device, &pci, nullptr, &pool),
-           "create descriptor pool");
+  VkDescriptorPool framePool;
+  CHECK_VK(vkCreateDescriptorPool(device, &framePci, nullptr, &framePool),
+           "create frame pool");
 
-  std::vector<VkDescriptorSetLayout> layouts(totalSets, setLayout);
-  VkDescriptorSetAllocateInfo ai = {
+  std::vector<VkDescriptorSetLayout> frameLayouts(frameSetCount, frameLayout);
+  VkDescriptorSetAllocateInfo frameAi = {
       .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO,
-      .descriptorPool = pool,
-      .descriptorSetCount = totalSets,
-      .pSetLayouts = layouts.data(),
+      .descriptorPool = framePool,
+      .descriptorSetCount = frameSetCount,
+      .pSetLayouts = frameLayouts.data(),
   };
-  std::vector<VkDescriptorSet> allSets(totalSets);
-  CHECK_VK(vkAllocateDescriptorSets(device, &ai, allSets.data()), "alloc sets");
-  std::vector<VkDescriptorSet> sets(allSets.begin(),
-                                    allSets.begin() + setCount);
-  std::vector<VkDescriptorSet> bakeSets(allSets.begin() + setCount,
-                                        allSets.end());
+  std::vector<VkDescriptorSet> frameAll(frameSetCount);
+  CHECK_VK(vkAllocateDescriptorSets(device, &frameAi, frameAll.data()),
+           "alloc frame sets");
+  std::vector<VkDescriptorSet> frameSets(
+      frameAll.begin(), frameAll.begin() + MAX_FRAMES_IN_FLIGHT);
+  std::vector<VkDescriptorSet> frameBake(
+      frameAll.begin() + MAX_FRAMES_IN_FLIGHT, frameAll.end());
 
-  auto writeSet = [&](VkDescriptorSet dst, uint32_t texIdx, VkBuffer cameraBuf,
-                      VkBuffer lightBuf, VkBuffer matBuf, VkBuffer ssrBuf,
-                      VkBuffer probeBuf, uint32_t envIdx) {
-    VkDescriptorImageInfo imageInfo = {
-        .sampler = textures[texIdx].sampler,
-        .imageView = textures[texIdx].view,
-        .imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
+  uint32_t materialSetCount =
+      textureCount * MAX_FRAMES_IN_FLIGHT + textureCount;
+  VkDescriptorPoolSize materialPoolSizes[2] = {
+      {.type = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
+       .descriptorCount = materialSetCount},
+      {.type = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,
+       .descriptorCount = materialSetCount},
+  };
+  VkDescriptorPoolCreateInfo materialPci = {
+      .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO,
+      .maxSets = materialSetCount,
+      .poolSizeCount = 2,
+      .pPoolSizes = materialPoolSizes,
+  };
+  VkDescriptorPool materialPool;
+  CHECK_VK(vkCreateDescriptorPool(device, &materialPci, nullptr, &materialPool),
+           "create material pool");
+
+  std::vector<VkDescriptorSetLayout> materialLayouts(materialSetCount,
+                                                     materialLayout);
+  VkDescriptorSetAllocateInfo materialAi = {
+      .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO,
+      .descriptorPool = materialPool,
+      .descriptorSetCount = materialSetCount,
+      .pSetLayouts = materialLayouts.data(),
+  };
+  std::vector<VkDescriptorSet> materialAll(materialSetCount);
+  CHECK_VK(vkAllocateDescriptorSets(device, &materialAi, materialAll.data()),
+           "alloc material sets");
+  std::vector<VkDescriptorSet> materialSets(
+      materialAll.begin(),
+      materialAll.begin() + textureCount * MAX_FRAMES_IN_FLIGHT);
+  std::vector<VkDescriptorSet> materialBake(
+      materialAll.begin() + textureCount * MAX_FRAMES_IN_FLIGHT,
+      materialAll.end());
+
+  VkDescriptorPoolSize envPoolSizes[2] = {
+      {.type = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
+       .descriptorCount = envCount},
+      {.type = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, .descriptorCount = envCount},
+  };
+  VkDescriptorPoolCreateInfo envPci = {
+      .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO,
+      .maxSets = envCount,
+      .poolSizeCount = 2,
+      .pPoolSizes = envPoolSizes,
+  };
+  VkDescriptorPool envPool;
+  CHECK_VK(vkCreateDescriptorPool(device, &envPci, nullptr, &envPool),
+           "create env pool");
+
+  std::vector<VkDescriptorSetLayout> envLayouts(envCount, envLayout);
+  VkDescriptorSetAllocateInfo envAi = {
+      .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO,
+      .descriptorPool = envPool,
+      .descriptorSetCount = envCount,
+      .pSetLayouts = envLayouts.data(),
+  };
+  std::vector<VkDescriptorSet> envSets(envCount);
+  CHECK_VK(vkAllocateDescriptorSets(device, &envAi, envSets.data()),
+           "alloc env sets");
+
+  // ---- Pass pool: per-frame sets, 4 samplers + 1 storage each ----
+  VkDescriptorPoolSize passPoolSizes[2] = {
+      {.type = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
+       .descriptorCount = MAX_FRAMES_IN_FLIGHT * 4},
+      {.type = VK_DESCRIPTOR_TYPE_STORAGE_IMAGE,
+       .descriptorCount = MAX_FRAMES_IN_FLIGHT},
+  };
+  VkDescriptorPoolCreateInfo passPci = {
+      .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO,
+      .maxSets = MAX_FRAMES_IN_FLIGHT,
+      .poolSizeCount = 2,
+      .pPoolSizes = passPoolSizes,
+  };
+  VkDescriptorPool passPool;
+  CHECK_VK(vkCreateDescriptorPool(device, &passPci, nullptr, &passPool),
+           "create pass pool");
+
+  std::vector<VkDescriptorSetLayout> passLayouts(MAX_FRAMES_IN_FLIGHT,
+                                                 passLayout);
+  VkDescriptorSetAllocateInfo passAi = {
+      .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO,
+      .descriptorPool = passPool,
+      .descriptorSetCount = MAX_FRAMES_IN_FLIGHT,
+      .pSetLayouts = passLayouts.data(),
+  };
+  std::vector<VkDescriptorSet> passSets(MAX_FRAMES_IN_FLIGHT);
+  CHECK_VK(vkAllocateDescriptorSets(device, &passAi, passSets.data()),
+           "alloc pass sets");
+
+  auto writeFrame = [&](VkDescriptorSet dst, VkBuffer cameraBuf,
+                        VkBuffer lightBuf, VkBuffer ssrBuf,
+                        VkBuffer objectsBuf) {
+    VkDescriptorBufferInfo cameraInfo = {
+        .buffer = cameraBuf,
+        .offset = 0,
+        .range = sizeof(CameraData),
     };
     VkDescriptorBufferInfo lightInfo = {
         .buffer = lightBuf,
         .offset = 0,
         .range = sizeof(LightData),
     };
-    VkDescriptorBufferInfo cameraInfo = {
-        .buffer = cameraBuf,
+    VkDescriptorBufferInfo ssrBufInfo = {
+        .buffer = ssrBuf,
         .offset = 0,
-        .range = sizeof(CameraData),
+        .range = sizeof(SsrData),
+    };
+    VkDescriptorBufferInfo objectsBufInfo = {
+        .buffer = objectsBuf,
+        .offset = 0,
+        .range = sizeof(ObjectsBlock),
+    };
+    VkWriteDescriptorSet writes[4] = {
+        {.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
+         .dstSet = dst,
+         .dstBinding = 0,
+         .descriptorCount = 1,
+         .descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,
+         .pBufferInfo = &cameraInfo},
+        {.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
+         .dstSet = dst,
+         .dstBinding = 1,
+         .descriptorCount = 1,
+         .descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,
+         .pBufferInfo = &lightInfo},
+        {.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
+         .dstSet = dst,
+         .dstBinding = 2,
+         .descriptorCount = 1,
+         .descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,
+         .pBufferInfo = &ssrBufInfo},
+        {.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
+         .dstSet = dst,
+         .dstBinding = 3,
+         .descriptorCount = 1,
+         .descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,
+         .pBufferInfo = &objectsBufInfo},
+    };
+    vkUpdateDescriptorSets(device, 4, writes, 0, nullptr);
+  };
+
+  auto writeMaterial = [&](VkDescriptorSet dst, uint32_t texIdx,
+                           VkBuffer matBuf) {
+    VkDescriptorImageInfo imageInfo = {
+        .sampler = textures[texIdx].sampler,
+        .imageView = textures[texIdx].view,
+        .imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
     };
     VkDescriptorBufferInfo materialInfo = {
         .buffer = matBuf,
         .offset = 0,
         .range = sizeof(MaterialsBlock),
     };
-    VkDescriptorImageInfo sceneInfo = {
-        .sampler = sceneSampler,
-        .imageView = sceneView,
-        .imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
-    };
-    VkDescriptorImageInfo envInfo = {
-        .sampler = envSampler,
-        .imageView = envViews[envIdx],
-        .imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
-    };
-    VkDescriptorImageInfo normalInfo = {
-        .sampler = grabSampler,
-        .imageView = normalView,
-        .imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
-    };
-    VkDescriptorImageInfo depthInfo = {
-        .sampler = depthSampler,
-        .imageView = depthView,
-        .imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
-    };
-    VkDescriptorImageInfo ssrInfo = {
-        .sampler = ssrSampler,
-        .imageView = ssrView,
-        .imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
-    };
-    VkDescriptorImageInfo ssrStoreInfo = {
-        .sampler = VK_NULL_HANDLE,
-        .imageView = ssrView,
-        .imageLayout = VK_IMAGE_LAYOUT_GENERAL,
-    };
-    VkDescriptorBufferInfo ssrBufInfo = {
-        .buffer = ssrBuf,
-        .offset = 0,
-        .range = sizeof(SsrData),
-    };
-    VkDescriptorBufferInfo probeBufInfo = {
-        .buffer = probeBuf,
-        .offset = 0,
-        .range = sizeof(ProbeData),
-    };
-    VkWriteDescriptorSet writes[12] = {
+    VkWriteDescriptorSet writes[2] = {
         {.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
          .dstSet = dst,
          .dstBinding = 0,
@@ -436,102 +582,45 @@ SceneDescriptors createSceneDescriptors(
          .dstBinding = 1,
          .descriptorCount = 1,
          .descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,
-         .pBufferInfo = &cameraInfo},
-        {.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
-         .dstSet = dst,
-         .dstBinding = 2,
-         .descriptorCount = 1,
-         .descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,
-         .pBufferInfo = &lightInfo},
-        {.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
-         .dstSet = dst,
-         .dstBinding = 3,
-         .descriptorCount = 1,
-         .descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,
          .pBufferInfo = &materialInfo},
+    };
+    vkUpdateDescriptorSets(device, 2, writes, 0, nullptr);
+  };
+
+  auto writeEnv = [&](VkDescriptorSet dst, uint32_t envIdx, VkBuffer probeBuf) {
+    VkDescriptorImageInfo envInfo = {
+        .sampler = envSampler,
+        .imageView = envViews[envIdx],
+        .imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
+    };
+    VkDescriptorBufferInfo probeBufInfo = {
+        .buffer = probeBuf,
+        .offset = 0,
+        .range = sizeof(ProbeData),
+    };
+    VkWriteDescriptorSet writes[2] = {
         {.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
          .dstSet = dst,
-         .dstBinding = 4,
-         .descriptorCount = 1,
-         .descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
-         .pImageInfo = &sceneInfo},
-        {.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
-         .dstSet = dst,
-         .dstBinding = 5,
+         .dstBinding = 0,
          .descriptorCount = 1,
          .descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
          .pImageInfo = &envInfo},
         {.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
          .dstSet = dst,
-         .dstBinding = 6,
-         .descriptorCount = 1,
-         .descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
-         .pImageInfo = &normalInfo},
-        {.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
-         .dstSet = dst,
-         .dstBinding = 7,
-         .descriptorCount = 1,
-         .descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
-         .pImageInfo = &depthInfo},
-        {.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
-         .dstSet = dst,
-         .dstBinding = 8,
-         .descriptorCount = 1,
-         .descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
-         .pImageInfo = &ssrInfo},
-        {.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
-         .dstSet = dst,
-         .dstBinding = 9,
-         .descriptorCount = 1,
-         .descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_IMAGE,
-         .pImageInfo = &ssrStoreInfo},
-        {.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
-         .dstSet = dst,
-         .dstBinding = 10,
-         .descriptorCount = 1,
-         .descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,
-         .pBufferInfo = &ssrBufInfo},
-        {.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
-         .dstSet = dst,
-         .dstBinding = 11,
+         .dstBinding = 1,
          .descriptorCount = 1,
          .descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,
          .pBufferInfo = &probeBufInfo},
     };
-    vkUpdateDescriptorSets(device, 12, writes, 0, nullptr);
+    vkUpdateDescriptorSets(device, 2, writes, 0, nullptr);
   };
 
-  for (uint32_t t = 0; t < textureCount; ++t) {
-    for (int f = 0; f < MAX_FRAMES_IN_FLIGHT; ++f) {
-      for (uint32_t e = 0; e < envCount; ++e) {
-        uint32_t idx = (f * envCount + e) * textureCount + t;
-        writeSet(sets[idx], t, cameras[f].buffer, lights[f].buffer,
-                 materials[f].buffer, ssrUbos[f].buffer, probes[e].buffer, e);
-      }
-    }
-  }
-  for (uint32_t t = 0; t < textureCount; ++t) {
-    writeSet(bakeSets[t], t, bakeCamera.buffer, bakeLights.buffer,
-             bakeMaterials.buffer, ssrUbos[0].buffer, probes[0].buffer, 0);
-  }
-
-  return SceneDescriptors{
-      .layout = setLayout,
-      .pool = pool,
-      .sets = std::move(sets),
-      .textureCount = textureCount,
-      .envCount = envCount,
-      .bakeSets = std::move(bakeSets),
-  };
-}
-
-void updateSsrResizeDescriptors(VkDevice device,
-                                const SceneDescriptors &descriptors,
-                                VkSampler grabSampler, VkImageView normalView,
-                                VkSampler depthSampler, VkImageView depthView,
-                                VkSampler ssrSampler, VkImageView ssrView,
-                                VkSampler sceneSampler, VkImageView sceneView) {
-  auto updateOne = [&](VkDescriptorSet set) {
+  auto writePass = [&](VkDescriptorSet dst) {
+    VkDescriptorImageInfo sceneInfo = {
+        .sampler = sceneSampler,
+        .imageView = sceneView,
+        .imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
+    };
     VkDescriptorImageInfo normalInfo = {
         .sampler = grabSampler,
         .imageView = normalView,
@@ -552,47 +641,168 @@ void updateSsrResizeDescriptors(VkDevice device,
         .imageView = ssrView,
         .imageLayout = VK_IMAGE_LAYOUT_GENERAL,
     };
-    VkDescriptorImageInfo sceneInfo = {
-        .sampler = sceneSampler,
-        .imageView = sceneView,
-        .imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
-    };
     VkWriteDescriptorSet writes[5] = {
         {.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
-         .dstSet = set,
-         .dstBinding = 4,
+         .dstSet = dst,
+         .dstBinding = 0,
          .descriptorCount = 1,
          .descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
          .pImageInfo = &sceneInfo},
         {.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
-         .dstSet = set,
-         .dstBinding = 6,
+         .dstSet = dst,
+         .dstBinding = 1,
          .descriptorCount = 1,
          .descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
          .pImageInfo = &normalInfo},
         {.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
-         .dstSet = set,
-         .dstBinding = 7,
+         .dstSet = dst,
+         .dstBinding = 2,
          .descriptorCount = 1,
          .descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
          .pImageInfo = &depthInfo},
         {.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
-         .dstSet = set,
-         .dstBinding = 8,
+         .dstSet = dst,
+         .dstBinding = 3,
          .descriptorCount = 1,
          .descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
          .pImageInfo = &ssrInfo},
         {.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
-         .dstSet = set,
-         .dstBinding = 9,
+         .dstSet = dst,
+         .dstBinding = 4,
          .descriptorCount = 1,
          .descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_IMAGE,
          .pImageInfo = &ssrStoreInfo},
     };
     vkUpdateDescriptorSets(device, 5, writes, 0, nullptr);
   };
-  for (VkDescriptorSet set : descriptors.sets)
-    updateOne(set);
-  for (VkDescriptorSet set : descriptors.bakeSets)
-    updateOne(set);
+
+  for (int f = 0; f < MAX_FRAMES_IN_FLIGHT; ++f) {
+    writeFrame(frameSets[f], cameras[f].buffer, lights[f].buffer,
+               ssrUbos[f].buffer, objects[f].buffer);
+  }
+  writeFrame(frameBake[0], bakeCamera.buffer, bakeLights.buffer,
+             ssrUbos[0].buffer, bakeObjects.buffer);
+
+  for (uint32_t t = 0; t < textureCount; ++t) {
+    for (int f = 0; f < MAX_FRAMES_IN_FLIGHT; ++f) {
+      writeMaterial(materialSets[f * textureCount + t], t, materials[f].buffer);
+    }
+    writeMaterial(materialBake[t], t, bakeMaterials.buffer);
+  }
+
+  for (uint32_t e = 0; e < envCount; ++e) {
+    writeEnv(envSets[e], e, probes[e].buffer);
+  }
+
+  for (int f = 0; f < MAX_FRAMES_IN_FLIGHT; ++f) {
+    writePass(passSets[f]);
+  }
+
+  SplitDescriptors out;
+  out.frame = FrameSets{
+      .layout = frameLayout,
+      .pool = framePool,
+      .sets = std::move(frameSets),
+      .bakeSets = std::move(frameBake),
+  };
+  out.material = MaterialSets{
+      .layout = materialLayout,
+      .pool = materialPool,
+      .sets = std::move(materialSets),
+      .bakeSets = std::move(materialBake),
+      .textureCount = textureCount,
+  };
+  out.env = EnvSets{
+      .layout = envLayout,
+      .pool = envPool,
+      .sets = std::move(envSets),
+  };
+  out.pass = PassSets{
+      .layout = passLayout,
+      .pool = passPool,
+      .sets = std::move(passSets),
+  };
+  out.textureCount = textureCount;
+  out.envCount = envCount;
+  return out;
+}
+
+void updatePassResizeDescriptors(VkDevice device, SplitDescriptors &descriptors,
+                                 VkSampler grabSampler, VkImageView normalView,
+                                 VkSampler depthSampler, VkImageView depthView,
+                                 VkSampler ssrSampler, VkImageView ssrView,
+                                 VkSampler sceneSampler,
+                                 VkImageView sceneView) {
+  for (VkDescriptorSet set : descriptors.pass.sets) {
+    VkDescriptorImageInfo sceneInfo = {
+        .sampler = sceneSampler,
+        .imageView = sceneView,
+        .imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
+    };
+    VkDescriptorImageInfo normalInfo = {
+        .sampler = grabSampler,
+        .imageView = normalView,
+        .imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
+    };
+    VkDescriptorImageInfo depthInfo = {
+        .sampler = depthSampler,
+        .imageView = depthView,
+        .imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
+    };
+    VkDescriptorImageInfo ssrInfo = {
+        .sampler = ssrSampler,
+        .imageView = ssrView,
+        .imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
+    };
+    VkDescriptorImageInfo ssrStoreInfo = {
+        .sampler = VK_NULL_HANDLE,
+        .imageView = ssrView,
+        .imageLayout = VK_IMAGE_LAYOUT_GENERAL,
+    };
+    VkWriteDescriptorSet writes[5] = {
+        {.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
+         .dstSet = set,
+         .dstBinding = 0,
+         .descriptorCount = 1,
+         .descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
+         .pImageInfo = &sceneInfo},
+        {.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
+         .dstSet = set,
+         .dstBinding = 1,
+         .descriptorCount = 1,
+         .descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
+         .pImageInfo = &normalInfo},
+        {.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
+         .dstSet = set,
+         .dstBinding = 2,
+         .descriptorCount = 1,
+         .descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
+         .pImageInfo = &depthInfo},
+        {.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
+         .dstSet = set,
+         .dstBinding = 3,
+         .descriptorCount = 1,
+         .descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
+         .pImageInfo = &ssrInfo},
+        {.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
+         .dstSet = set,
+         .dstBinding = 4,
+         .descriptorCount = 1,
+         .descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_IMAGE,
+         .pImageInfo = &ssrStoreInfo},
+    };
+    vkUpdateDescriptorSets(device, 5, writes, 0, nullptr);
+  }
+}
+
+void destroySplitDescriptors(VkDevice device, SplitDescriptors &descriptors) {
+  vkDestroyDescriptorPool(device, descriptors.frame.pool, nullptr);
+  vkDestroyDescriptorSetLayout(device, descriptors.frame.layout, nullptr);
+  vkDestroyDescriptorPool(device, descriptors.material.pool, nullptr);
+  vkDestroyDescriptorSetLayout(device, descriptors.material.layout, nullptr);
+  vkDestroyDescriptorPool(device, descriptors.env.pool, nullptr);
+  vkDestroyDescriptorSetLayout(device, descriptors.env.layout, nullptr);
+  vkDestroyDescriptorPool(device, descriptors.pass.pool, nullptr);
+  vkDestroyDescriptorSetLayout(device, descriptors.pass.layout, nullptr);
+  descriptors = SplitDescriptors{};
 }

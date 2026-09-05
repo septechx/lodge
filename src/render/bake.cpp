@@ -2,7 +2,9 @@
 
 #include "src/render/buffers.hpp"
 #include "src/render/cube.hpp"
+#include "src/render/draw_groups.hpp"
 #include "src/render/pipelines/pipeline.hpp"
+#include "src/render/pipelines/selection.hpp"
 #include "src/render/render.hpp"
 #include "src/render/utils.hpp"
 #include "src/utils.hpp"
@@ -11,7 +13,7 @@
 
 void recordBakeFace(VkCommandBuffer cmd, GraphicsPipelines pipelines,
                     std::span<const RenderObject> objects,
-                    const SceneDescriptors &descriptors, EnvCube env,
+                    const SplitDescriptors &descriptors, EnvCube env,
                     uint32_t face, VkImage faceDepthImage,
                     VkImageView faceDepthView) {
 
@@ -90,8 +92,8 @@ void recordBakeFace(VkCommandBuffer cmd, GraphicsPipelines pipelines,
   vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS,
                     pipelines.sky.pipeline);
 
-  LDG_ASSERT(!descriptors.bakeSets.empty());
-  VkDescriptorSet skySet = descriptors.bakeSets.back();
+  LDG_ASSERT(!descriptors.frame.bakeSets.empty());
+  VkDescriptorSet skySet = descriptors.frame.bakeSets[0];
   vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS,
                           pipelines.sky.layout, 0, 1, &skySet, 0, nullptr);
 
@@ -101,25 +103,33 @@ void recordBakeFace(VkCommandBuffer cmd, GraphicsPipelines pipelines,
   vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS,
                     pipelines.opaque.pipeline);
 
-  for (size_t i = 0; i < objects.size(); ++i) {
-    const RenderObject &object = objects[i];
-    if (object.material.kind != MaterialKind::Opaque) {
-      continue;
-    }
-
+  std::vector<DrawItem> items;
+  items.reserve(objects.size());
+  for (const RenderObject &object : objects) {
     uint32_t texIdx = object.material.texture.index;
-    if (texIdx >= descriptors.bakeSets.size())
+    if (texIdx >= descriptors.material.bakeSets.size()) {
       texIdx = 0;
-    VkDescriptorSet set = descriptors.bakeSets[texIdx];
+    }
+    items.push_back(DrawItem{
+        .kind = object.material.kind,
+        .doubleSided = object.material.doubleSided,
+        .texIdx = texIdx,
+    });
+  }
+  VkDescriptorSet bakeFrame = descriptors.frame.bakeSets[0];
+  for (const Draw &draw : groupDraws(items, Pass::Bake)) {
+    const RenderObject &object = objects[draw.objectIdx];
+    VkDescriptorSet sets[2] = {bakeFrame,
+                               descriptors.material.bakeSets[draw.texIdx]};
     vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS,
-                            pipelines.opaque.layout, 0, 1, &set, 0, nullptr);
+                            pipelines.opaque.layout, 0, 2, sets, 0, nullptr);
 
     VkDeviceSize offset = 0;
     vkCmdBindVertexBuffers(cmd, 0, 1, &object.vbuf.buffer, &offset);
     vkCmdBindIndexBuffer(cmd, object.ibuf.buffer, 0, object.indexType);
 
     PushConstants pc{.model = object.worldMat,
-                     .materialIdx = static_cast<uint32_t>(i)};
+                     .objectIdx = draw.objectIdx};
     vkCmdPushConstants(cmd, pipelines.opaque.layout, VK_SHADER_STAGE_VERTEX_BIT,
                        0, sizeof(PushConstants), &pc);
 
@@ -152,7 +162,7 @@ void recordBakeFace(VkCommandBuffer cmd, GraphicsPipelines pipelines,
 
 void bakeOneFace(Device device, GraphicsPipelines pipelines,
                  std::span<const RenderObject> objects,
-                 const SceneDescriptors &descriptors, EnvCube env, Vec3 probe,
+                 const SplitDescriptors &descriptors, EnvCube env, Vec3 probe,
                  uint32_t face, CameraUniformBuffer &bakeCamera,
                  DepthBuffer &bakeDepth, CmdBundle &bakeCmd,
                  VkFence bakeFence) {
@@ -180,13 +190,15 @@ void bakeOneFace(Device device, GraphicsPipelines pipelines,
 
 bool tryBakeOneFaceAsync(Device device, GraphicsPipelines pipelines,
                          std::span<const RenderObject> objects,
-                         const SceneDescriptors &descriptors, EnvCube env,
+                         const SplitDescriptors &descriptors, EnvCube env,
                          Vec3 probe, uint32_t face,
                          CameraUniformBuffer &bakeCamera,
                          LightUniformBuffer &bakeLights,
                          MaterialUniformBuffer &bakeMaterials,
+                         ObjectUniformBuffer &bakeObjects,
                          const LightData *freshLightOrNull,
                          const MaterialsBlock *freshMaterials,
+                         const ObjectsBlock *freshObjects,
                          DepthBuffer &bakeDepth, CmdBundle &bakeCmd,
                          VkFence bakeFence, bool &pending) {
   if (pending) {
@@ -205,6 +217,9 @@ bool tryBakeOneFaceAsync(Device device, GraphicsPipelines pipelines,
   }
   if (freshMaterials != nullptr) {
     memcpy(bakeMaterials.mapped, freshMaterials, sizeof(MaterialsBlock));
+  }
+  if (freshObjects != nullptr) {
+    memcpy(bakeObjects.mapped, freshObjects, sizeof(ObjectsBlock));
   }
 
   Mat4 proj = Mat4::perspective(90.0f, 1.0f, 0.1f, 20.0f, false);
@@ -229,7 +244,7 @@ bool tryBakeOneFaceAsync(Device device, GraphicsPipelines pipelines,
 
 void bakeEnvironment(Device device, GraphicsPipelines pipelines,
                      std::span<const RenderObject> objects,
-                     const SceneDescriptors &descriptors,
+                     const SplitDescriptors &descriptors,
                      std::span<const EnvCube> envs,
                      std::span<const Vec3> probes,
                      CameraUniformBuffer &bakeCamera, DepthBuffer &bakeDepth,

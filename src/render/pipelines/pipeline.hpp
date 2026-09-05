@@ -29,3 +29,6 @@ struct ShaderModules {
 
 ShaderModules loadShaders(VkDevice device, const std::filesystem::path &vert,
                           const std::filesystem::path &frag);
+
+void loadShader(VkDevice device, const std::filesystem::path path,
+                VkShaderModule &module);

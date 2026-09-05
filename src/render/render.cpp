@@ -1,6 +1,8 @@
 #include "render.hpp"
 
+#include "src/render/draw_groups.hpp"
 #include "src/render/pipelines/pipeline.hpp"
+#include "src/render/pipelines/selection.hpp"
 #include "src/render/utils.hpp"
 
 #include <imgui_impl_vulkan.h>
@@ -58,14 +60,102 @@ static uint32_t nearestProbe(Vec3 pos, std::span<const Vec3> probes,
   return best;
 }
 
+static std::vector<DrawItem> buildDrawItems(std::span<const RenderObject> objects,
+                                            uint32_t textureCount) {
+  std::vector<DrawItem> items;
+  items.reserve(objects.size());
+  for (const RenderObject &object : objects) {
+    uint32_t texIdx = object.material.texture.index;
+    if (texIdx >= textureCount) {
+      texIdx = 0;
+    }
+    items.push_back(DrawItem{
+        .kind = object.material.kind,
+        .doubleSided = object.material.doubleSided,
+        .texIdx = texIdx,
+    });
+  }
+  return items;
+}
+
+static const GraphicsPipeline &pipelineForId(const GraphicsPipelines &pipelines,
+                                             PipelineId id) {
+  switch (id) {
+  case PipelineId::OpaqueGrab:
+    return pipelines.opaqueGrab;
+  case PipelineId::OpaqueComp:
+    return pipelines.opaqueComp;
+  case PipelineId::OpaqueBake:
+    return pipelines.opaque;
+  case PipelineId::Transparent:
+    return pipelines.transparent;
+  case PipelineId::Sky:
+    return pipelines.sky;
+  }
+  return pipelines.opaqueComp;
+}
+
+static void recordDraws(VkCommandBuffer cmd, const GraphicsPipelines &pipelines,
+                        std::span<const RenderObject> objects,
+                        const std::vector<Draw> &draws,
+                        const SplitDescriptors &descriptors,
+                        uint32_t frameIndex, std::span<const Vec3> probes) {
+  bool hasPipeline = false;
+  PipelineId bound = PipelineId::Sky;
+  for (const Draw &draw : draws) {
+    if (!hasPipeline || draw.pipeline != bound) {
+      bound = draw.pipeline;
+      hasPipeline = true;
+      vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS,
+                        pipelineForId(pipelines, bound).pipeline);
+    }
+    const RenderObject &object = objects[draw.objectIdx];
+    uint32_t envIdx =
+        nearestProbe(objectCenter(object), probes, descriptors.envCount);
+    VkDescriptorSet sets[4] = {
+        descriptors.frame.sets[frameIndex],
+        descriptors.material.get(frameIndex, draw.texIdx),
+        descriptors.env.sets[envIdx],
+        descriptors.pass.sets[frameIndex],
+    };
+    uint32_t setCount =
+        (bound == PipelineId::OpaqueComp || bound == PipelineId::Transparent)
+            ? 4
+            : 2;
+    vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS,
+                            pipelineForId(pipelines, bound).layout, 0, setCount,
+                            sets, 0, nullptr);
+
+    VkDeviceSize offset = 0;
+    vkCmdBindVertexBuffers(cmd, 0, 1, &object.vbuf.buffer, &offset);
+    vkCmdBindIndexBuffer(cmd, object.ibuf.buffer, 0, object.indexType);
+
+    PushConstants pc{.model = object.worldMat,
+                     .objectIdx = draw.objectIdx};
+    vkCmdPushConstants(cmd, pipelineForId(pipelines, bound).layout,
+                       VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(PushConstants),
+                       &pc);
+
+    vkCmdDrawIndexed(cmd, object.indexCount, 1, 0, 0, 0);
+  }
+}
+
 void recordFrame(VkCommandBuffer cmd, GraphicsPipelines pipelines,
                  ComputePipeline ssr, std::span<const RenderObject> objects,
-                 const SceneDescriptors &descriptors, uint32_t frameIndex,
-                 std::span<const Vec3> probes, VkImage image, VkImageView view,
-                 VkImage depthImage, VkImageView depthView, SceneGrab grab,
-                 SceneGrab grabNormal, VkImage grabDepthImage,
-                 VkImageView grabDepthView, SsrTarget ssrTarget,
-                 const VkExtent2D &extent, ImDrawData *drawData) {
+                 const FrameContext &ctx, ImDrawData *drawData) {
+  const SplitDescriptors &descriptors = *ctx.descriptors;
+  const uint32_t frameIndex = ctx.frameIndex;
+  const std::span<const Vec3> probes = ctx.probes;
+  const VkImage image = ctx.image;
+  const VkImageView view = ctx.view;
+  const VkImage depthImage = ctx.depthImage;
+  const VkImageView depthView = ctx.depthView;
+  const SceneGrab grab = ctx.grab;
+  const SceneGrab grabNormal = ctx.grabNormal;
+  const VkImage grabDepthImage = ctx.grabDepthImage;
+  const VkImageView grabDepthView = ctx.grabDepthView;
+  const SsrTarget ssrTarget = ctx.ssrTarget;
+  const VkExtent2D extent = ctx.extent;
 
   VkCommandBufferBeginInfo begin = {
       .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO,
@@ -156,44 +246,16 @@ void recordFrame(VkCommandBuffer cmd, GraphicsPipelines pipelines,
   vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS,
                     pipelines.skyGrab.pipeline);
 
-  VkDescriptorSet skyGrabSet =
-      descriptors.get(frameIndex, descriptors.textureCount - 1);
+  VkDescriptorSet skyGrabSet = descriptors.frame.sets[frameIndex];
   vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS,
                           pipelines.skyGrab.layout, 0, 1, &skyGrabSet, 0,
                           nullptr);
   vkCmdDraw(cmd, 3, 1, 0, 0);
 
-  vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS,
-                    pipelines.opaqueGrab.pipeline);
-
-  for (size_t i = 0; i < objects.size(); ++i) {
-    const RenderObject &object = objects[i];
-    if (object.material.kind != MaterialKind::Opaque) {
-      continue;
-    }
-
-    uint32_t texIdx = object.material.texture.index;
-    if (texIdx >= descriptors.textureCount)
-      texIdx = 0;
-    uint32_t envIdx =
-        nearestProbe(objectCenter(object), probes, descriptors.envCount);
-    VkDescriptorSet set = descriptors.get(frameIndex, texIdx, envIdx);
-    vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS,
-                            pipelines.opaqueGrab.layout, 0, 1, &set, 0,
-                            nullptr);
-
-    VkDeviceSize offset = 0;
-    vkCmdBindVertexBuffers(cmd, 0, 1, &object.vbuf.buffer, &offset);
-    vkCmdBindIndexBuffer(cmd, object.ibuf.buffer, 0, object.indexType);
-
-    PushConstants pc{.model = object.worldMat,
-                     .materialIdx = static_cast<uint32_t>(i)};
-    vkCmdPushConstants(cmd, pipelines.opaqueGrab.layout,
-                       VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(PushConstants),
-                       &pc);
-
-    vkCmdDrawIndexed(cmd, object.indexCount, 1, 0, 0, 0);
-  }
+  recordDraws(cmd, pipelines, objects,
+              groupDraws(buildDrawItems(objects, descriptors.textureCount),
+                         Pass::Grab),
+              descriptors, frameIndex, probes);
 
   vkCmdEndRendering(cmd);
 
@@ -256,10 +318,10 @@ void recordFrame(VkCommandBuffer cmd, GraphicsPipelines pipelines,
   vkCmdPipelineBarrier2(cmd, &depSsrW);
 
   vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, ssr.pipeline);
-  VkDescriptorSet ssrSet =
-      descriptors.get(frameIndex, descriptors.textureCount - 1, 0);
+  VkDescriptorSet ssrSets[2] = {descriptors.frame.sets[frameIndex],
+                                descriptors.pass.sets[frameIndex]};
   vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, ssr.layout, 0,
-                          1, &ssrSet, 0, nullptr);
+                          2, ssrSets, 0, nullptr);
   vkCmdDispatch(cmd, (extent.width + 15) / 16, (extent.height + 15) / 16, 1);
 
   VkImageMemoryBarrier2 ssrToRead = {
@@ -345,75 +407,15 @@ void recordFrame(VkCommandBuffer cmd, GraphicsPipelines pipelines,
 
   vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS,
                     pipelines.sky.pipeline);
-  VkDescriptorSet skySet =
-      descriptors.get(frameIndex, descriptors.textureCount - 1);
+  VkDescriptorSet skySet = descriptors.frame.sets[frameIndex];
   vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS,
                           pipelines.sky.layout, 0, 1, &skySet, 0, nullptr);
   vkCmdDraw(cmd, 3, 1, 0, 0);
 
-  vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS,
-                    pipelines.opaqueComp.pipeline);
-
-  for (size_t i = 0; i < objects.size(); ++i) {
-    const RenderObject &object = objects[i];
-    if (object.material.kind != MaterialKind::Opaque) {
-      continue;
-    }
-
-    uint32_t texIdx = object.material.texture.index;
-    if (texIdx >= descriptors.textureCount)
-      texIdx = 0;
-    uint32_t envIdx =
-        nearestProbe(objectCenter(object), probes, descriptors.envCount);
-    VkDescriptorSet set = descriptors.get(frameIndex, texIdx, envIdx);
-    vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS,
-                            pipelines.opaqueComp.layout, 0, 1, &set, 0,
-                            nullptr);
-
-    VkDeviceSize offset = 0;
-    vkCmdBindVertexBuffers(cmd, 0, 1, &object.vbuf.buffer, &offset);
-    vkCmdBindIndexBuffer(cmd, object.ibuf.buffer, 0, object.indexType);
-
-    PushConstants pc{.model = object.worldMat,
-                     .materialIdx = static_cast<uint32_t>(i)};
-    vkCmdPushConstants(cmd, pipelines.opaqueComp.layout,
-                       VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(PushConstants),
-                       &pc);
-
-    vkCmdDrawIndexed(cmd, object.indexCount, 1, 0, 0, 0);
-  }
-
-  vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS,
-                    pipelines.transparent.pipeline);
-
-  for (size_t i = 0; i < objects.size(); ++i) {
-    const RenderObject &object = objects[i];
-    if (object.material.kind != MaterialKind::Transparent) {
-      continue;
-    }
-
-    uint32_t texIdx = object.material.texture.index;
-    if (texIdx >= descriptors.textureCount)
-      texIdx = 0;
-    uint32_t envIdx =
-        nearestProbe(objectCenter(object), probes, descriptors.envCount);
-    VkDescriptorSet set = descriptors.get(frameIndex, texIdx, envIdx);
-    vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS,
-                            pipelines.transparent.layout, 0, 1, &set, 0,
-                            nullptr);
-
-    VkDeviceSize offset = 0;
-    vkCmdBindVertexBuffers(cmd, 0, 1, &object.vbuf.buffer, &offset);
-    vkCmdBindIndexBuffer(cmd, object.ibuf.buffer, 0, object.indexType);
-
-    PushConstants pc{.model = object.worldMat,
-                     .materialIdx = static_cast<uint32_t>(i)};
-    vkCmdPushConstants(cmd, pipelines.transparent.layout,
-                       VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(PushConstants),
-                       &pc);
-
-    vkCmdDrawIndexed(cmd, object.indexCount, 1, 0, 0, 0);
-  }
+  recordDraws(cmd, pipelines, objects,
+              groupDraws(buildDrawItems(objects, descriptors.textureCount),
+                         Pass::Main),
+              descriptors, frameIndex, probes);
 
   vkCmdEndRendering(cmd);
 

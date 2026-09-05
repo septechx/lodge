@@ -11,13 +11,13 @@
 
 void recordBakeFace(VkCommandBuffer cmd, GraphicsPipelines pipelines,
                     std::span<const RenderObject> objects,
-                    const SceneDescriptors &descriptors, EnvCube env,
+                    const SplitDescriptors &descriptors, EnvCube env,
                     uint32_t face, VkImage faceDepthImage,
                     VkImageView faceDepthView);
 
 void bakeEnvironment(Device device, GraphicsPipelines pipelines,
                      std::span<const RenderObject> objects,
-                     const SceneDescriptors &descriptors,
+                     const SplitDescriptors &descriptors,
                      std::span<const EnvCube> envs,
                      std::span<const Vec3> probes,
                      CameraUniformBuffer &bakeCamera, DepthBuffer &bakeDepth,
@@ -25,15 +25,16 @@ void bakeEnvironment(Device device, GraphicsPipelines pipelines,
 
 void bakeOneFace(Device device, GraphicsPipelines pipelines,
                  std::span<const RenderObject> objects,
-                 const SceneDescriptors &descriptors, EnvCube env, Vec3 probe,
+                 const SplitDescriptors &descriptors, EnvCube env, Vec3 probe,
                  uint32_t face, CameraUniformBuffer &bakeCamera,
                  DepthBuffer &bakeDepth, CmdBundle &bakeCmd, VkFence bakeFence);
 
 bool tryBakeOneFaceAsync(
     Device device, GraphicsPipelines pipelines,
-    std::span<const RenderObject> objects, const SceneDescriptors &descriptors,
+    std::span<const RenderObject> objects, const SplitDescriptors &descriptors,
     EnvCube env, Vec3 probe, uint32_t face, CameraUniformBuffer &bakeCamera,
     LightUniformBuffer &bakeLights, MaterialUniformBuffer &bakeMaterials,
-    const LightData *freshLightOrNull, const MaterialsBlock *freshMaterials,
+    ObjectUniformBuffer &bakeObjects, const LightData *freshLightOrNull,
+    const MaterialsBlock *freshMaterials, const ObjectsBlock *freshObjects,
     DepthBuffer &bakeDepth, CmdBundle &bakeCmd, VkFence bakeFence,
     bool &pending);

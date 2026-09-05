@@ -2,7 +2,13 @@
 
 #include "src/render/pipelines/pipeline.hpp"
 
-GraphicsPipeline createSkyPipeline(VkDevice device, VkFormat colorFormat,
-                                   VkFormat depthFormat,
-                                   const VkExtent2D &extent,
-                                   VkDescriptorSetLayout setLayout);
+#include <span>
+
+GraphicsPipeline
+createSkyPipeline(VkDevice device, VkFormat colorFormat, VkFormat depthFormat,
+                  std::span<const VkDescriptorSetLayout> setLayouts);
+
+GraphicsPipeline
+createSkyGrabPipeline(VkDevice device, VkFormat colorFormat,
+                      VkFormat normalFormat, VkFormat depthFormat,
+                      std::span<const VkDescriptorSetLayout> setLayouts);

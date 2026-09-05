@@ -1,6 +1,6 @@
 #version 450
 
-layout(binding = 1) uniform CameraData {
+layout(set = 0, binding = 0) uniform CameraData {
     mat4 viewProj;
     vec3 viewPos;
 } camera;

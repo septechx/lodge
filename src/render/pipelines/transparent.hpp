@@ -2,8 +2,9 @@
 
 #include "src/render/pipelines/pipeline.hpp"
 
-GraphicsPipeline createTransparentPipeline(VkDevice device,
-                                           VkFormat colorFormat,
-                                           VkFormat depthFormat,
-                                           const VkExtent2D &extent,
-                                           VkDescriptorSetLayout setLayout);
+#include <span>
+
+GraphicsPipeline
+createTransparentPipeline(VkDevice device, VkFormat colorFormat,
+                          VkFormat depthFormat,
+                          std::span<const VkDescriptorSetLayout> setLayouts);

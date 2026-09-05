@@ -72,7 +72,11 @@ executable(
   'src/render/swapchain.cpp',
   'src/render/buffers.cpp',
   'src/render/bake.cpp',
+  'src/render/material_store.cpp',
+  'src/render/draw_groups.cpp',
   'src/render/pipelines/pipeline.cpp',
+  'src/render/pipelines/selection.cpp',
+  'src/render/pipelines/builder.cpp',
   'src/render/pipelines/opaque.cpp',
   'src/render/pipelines/transparent.cpp',
   'src/render/pipelines/sky.cpp',
@@ -108,4 +112,23 @@ if catch2_dep.found()
     include_directories: include_directories('src'),
   )
   test('scene', test_scene)
+
+  test_material = executable(
+    'test_material',
+    'tests/test_material.cpp',
+    'src/render/pipelines/selection.cpp',
+    'src/render/material_store.cpp',
+    'src/render/draw_groups.cpp',
+    dependencies: catch2_dep,
+    include_directories: include_directories('src', '.'),
+  )
+  test('material', test_material)
+
+  test_pipeline = executable(
+    'test_pipeline',
+    'tests/test_pipeline.cpp',
+    dependencies: [catch2_dep, dependency('vulkan')],
+    include_directories: include_directories('src', '.'),
+  )
+  test('pipeline', test_pipeline)
 endif

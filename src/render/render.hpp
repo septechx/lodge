@@ -16,11 +16,22 @@ struct CmdBundle {
 
 CmdBundle createCmd(VkDevice device, uint32_t queueFamily);
 
+struct FrameContext {
+  const SplitDescriptors *descriptors;
+  uint32_t frameIndex;
+  std::span<const Vec3> probes;
+  VkImage image;
+  VkImageView view;
+  VkImage depthImage;
+  VkImageView depthView;
+  SceneGrab grab;
+  SceneGrab grabNormal;
+  VkImage grabDepthImage;
+  VkImageView grabDepthView;
+  SsrTarget ssrTarget;
+  VkExtent2D extent;
+};
+
 void recordFrame(VkCommandBuffer cmd, GraphicsPipelines pipelines,
                  ComputePipeline ssr, std::span<const RenderObject> objects,
-                 const SceneDescriptors &descriptors, uint32_t frameIndex,
-                 std::span<const Vec3> probes, VkImage image, VkImageView view,
-                 VkImage depthImage, VkImageView depthView, SceneGrab grab,
-                 SceneGrab grabNormal, VkImage grabDepthImage,
-                 VkImageView grabDepthView, SsrTarget ssrTarget,
-                 const VkExtent2D &extent, ImDrawData *drawData = nullptr);
+                 const FrameContext &ctx, ImDrawData *drawData = nullptr);

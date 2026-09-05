@@ -66,7 +66,7 @@ void Engine::buildScene() {
   ModelHandle box2 = loadModel(*m_assets, "models/Box2_2.glb");
   GameObject &prop3 = m_scene->create("Box2");
   prop3.renderer = ModelRenderer{box2};
-  prop3.transform.position = Vec3{1.0f, 0.0f, 4.0f};
+  prop3.transform.position = Vec3{1.0f, 0.0f, 5.0f};
 
   GameObject &camera = m_scene->create("Main Camera");
   camera.camera = CameraParams{};
