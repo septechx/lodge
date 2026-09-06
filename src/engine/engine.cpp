@@ -1,10 +1,12 @@
 #include "engine.hpp"
 
+#include "src/asset/handles.hpp"
 #include "src/asset/model/load.hpp"
 #include "src/asset/store.hpp"
 #include "src/consts.hpp"
 #include "src/core/control_layer.hpp"
 #include "src/core/debug_layer.hpp"
+#include "src/scene/game_object.hpp"
 #include "src/scene/scene.hpp"
 
 #include <spdlog/spdlog.h>
@@ -67,6 +69,11 @@ void Engine::buildScene() {
   GameObject &prop3 = m_scene->create("Box2");
   prop3.renderer = ModelRenderer{box2};
   prop3.transform.position = Vec3{1.0f, 0.0f, 5.0f};
+
+  ModelHandle box3 = loadModel(*m_assets, "models/MetalCube.glb");
+  GameObject &prop4 = m_scene->create("Box3");
+  prop4.renderer = ModelRenderer{box3};
+  prop4.transform.position = Vec3{2.0f, 2.0f, -2.0f};
 
   GameObject &camera = m_scene->create("Main Camera");
   camera.camera = CameraParams{};
