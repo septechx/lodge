@@ -60,19 +60,17 @@ static uint32_t nearestProbe(Vec3 pos, std::span<const Vec3> probes,
   return best;
 }
 
-static std::vector<DrawItem> buildDrawItems(std::span<const RenderObject> objects,
-                                            uint32_t textureCount) {
+static std::vector<DrawItem>
+buildDrawItems(std::span<const RenderObject> objects,
+               const MaterialSets &materials) {
   std::vector<DrawItem> items;
   items.reserve(objects.size());
   for (const RenderObject &object : objects) {
-    uint32_t texIdx = object.material.texture.index;
-    if (texIdx >= textureCount) {
-      texIdx = 0;
-    }
+    uint32_t matIdx = materials.find(object.material);
     items.push_back(DrawItem{
         .kind = object.material.kind,
         .doubleSided = object.material.doubleSided,
-        .texIdx = texIdx,
+        .matIdx = matIdx,
     });
   }
   return items;
@@ -114,7 +112,7 @@ static void recordDraws(VkCommandBuffer cmd, const GraphicsPipelines &pipelines,
         nearestProbe(objectCenter(object), probes, descriptors.envCount);
     VkDescriptorSet sets[4] = {
         descriptors.frame.sets[frameIndex],
-        descriptors.material.get(frameIndex, draw.texIdx),
+        descriptors.material.get(frameIndex, draw.matIdx),
         descriptors.env.sets[envIdx],
         descriptors.pass.sets[frameIndex],
     };
@@ -253,7 +251,7 @@ void recordFrame(VkCommandBuffer cmd, GraphicsPipelines pipelines,
   vkCmdDraw(cmd, 3, 1, 0, 0);
 
   recordDraws(cmd, pipelines, objects,
-              groupDraws(buildDrawItems(objects, descriptors.textureCount),
+              groupDraws(buildDrawItems(objects, descriptors.material),
                          Pass::Grab),
               descriptors, frameIndex, probes);
 
@@ -413,7 +411,7 @@ void recordFrame(VkCommandBuffer cmd, GraphicsPipelines pipelines,
   vkCmdDraw(cmd, 3, 1, 0, 0);
 
   recordDraws(cmd, pipelines, objects,
-              groupDraws(buildDrawItems(objects, descriptors.textureCount),
+              groupDraws(buildDrawItems(objects, descriptors.material),
                          Pass::Main),
               descriptors, frameIndex, probes);
 

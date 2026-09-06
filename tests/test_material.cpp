@@ -37,6 +37,10 @@ TEST_CASE("MaterialStore dedups identical materials", "[material]") {
   diffColor.baseColorFactor = Vec4{0.0f, 0.0f, 0.0f, 1.0f};
   Material diffKind = a;
   diffKind.kind = MaterialKind::Transparent;
+  Material diffMr = a;
+  diffMr.metallicRoughness = TextureHandle{7};
+  Material diffNormal = a;
+  diffNormal.normal = TextureHandle{8};
 
   REQUIRE(store.intern(a) == 0);
   REQUIRE(store.intern(same) == 0);
@@ -44,7 +48,9 @@ TEST_CASE("MaterialStore dedups identical materials", "[material]") {
   REQUIRE(store.intern(diffTex) == 1);
   REQUIRE(store.intern(diffColor) == 2);
   REQUIRE(store.intern(diffKind) == 3);
-  REQUIRE(store.size() == 4);
+  REQUIRE(store.intern(diffMr) == 4);
+  REQUIRE(store.intern(diffNormal) == 5);
+  REQUIRE(store.size() == 6);
   REQUIRE(store.at(0).texture.index == 2);
 }
 
@@ -58,8 +64,8 @@ TEST_CASE("groupDraws filters and sorts", "[material]") {
   REQUIRE(main.size() == 3);
   // OpaqueComp (grab/main/bake ordering) sorts before Transparent.
   REQUIRE(main.front().pipeline == PipelineId::OpaqueComp);
-  REQUIRE(main.front().texIdx == 1);
-  REQUIRE(main[1].texIdx == 2);
+  REQUIRE(main.front().matIdx == 1);
+  REQUIRE(main[1].matIdx == 2);
   REQUIRE(main.back().pipeline == PipelineId::Transparent);
 
   auto grab = groupDraws(items, Pass::Grab);

@@ -42,6 +42,7 @@ public:
 
   TextureHandle whiteTexture() const { return TextureHandle{0}; }
   TextureHandle yellowTexture() const { return TextureHandle{1}; }
+  TextureHandle flatNormalTexture() const { return TextureHandle{2}; }
   MeshHandle unitCube() const { return MeshHandle{0}; }
   ModelHandle gizmoModel() const { return ModelHandle{0}; }
 

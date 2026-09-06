@@ -13,15 +13,15 @@ std::vector<Draw> groupDraws(std::span<const DrawItem> items, Pass pass) {
     out.push_back(Draw{
         .objectIdx = i,
         .pipeline = *id,
-        .texIdx = items[i].texIdx,
+        .matIdx = items[i].matIdx,
     });
   }
   std::stable_sort(out.begin(), out.end(), [](const Draw &a, const Draw &b) {
     if (a.pipeline != b.pipeline) {
       return a.pipeline < b.pipeline;
     }
-    if (a.texIdx != b.texIdx) {
-      return a.texIdx < b.texIdx;
+    if (a.matIdx != b.matIdx) {
+      return a.matIdx < b.matIdx;
     }
     return a.objectIdx < b.objectIdx;
   });

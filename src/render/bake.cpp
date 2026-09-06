@@ -106,21 +106,17 @@ void recordBakeFace(VkCommandBuffer cmd, GraphicsPipelines pipelines,
   std::vector<DrawItem> items;
   items.reserve(objects.size());
   for (const RenderObject &object : objects) {
-    uint32_t texIdx = object.material.texture.index;
-    if (texIdx >= descriptors.material.bakeSets.size()) {
-      texIdx = 0;
-    }
     items.push_back(DrawItem{
         .kind = object.material.kind,
         .doubleSided = object.material.doubleSided,
-        .texIdx = texIdx,
+        .matIdx = descriptors.material.find(object.material),
     });
   }
   VkDescriptorSet bakeFrame = descriptors.frame.bakeSets[0];
   for (const Draw &draw : groupDraws(items, Pass::Bake)) {
     const RenderObject &object = objects[draw.objectIdx];
     VkDescriptorSet sets[2] = {bakeFrame,
-                               descriptors.material.bakeSets[draw.texIdx]};
+                               descriptors.material.getBake(draw.matIdx)};
     vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS,
                             pipelines.opaque.layout, 0, 2, sets, 0, nullptr);
 

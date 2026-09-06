@@ -263,12 +263,35 @@ static uint32_t loadGltfTextures(AssetStore &store,
                                  const tinygltf3::Model &model) {
   uint32_t base = static_cast<uint32_t>(store.textures().size());
 
+  std::vector<char> isData(model->textures_count, 0);
+  std::vector<char> isColor(model->textures_count, 0);
+  for (uint32_t mi = 0; mi < model->materials_count; ++mi) {
+    const tg3_material *mat = &model->materials[mi];
+    int bc = mat->pbr_metallic_roughness.base_color_texture.index;
+    if (bc >= 0 && static_cast<uint32_t>(bc) < model->textures_count)
+      isColor[static_cast<uint32_t>(bc)] = 1;
+    int mr = mat->pbr_metallic_roughness.metallic_roughness_texture.index;
+    if (mr >= 0 && static_cast<uint32_t>(mr) < model->textures_count)
+      isData[static_cast<uint32_t>(mr)] = 1;
+    int nt = mat->normal_texture.index;
+    if (nt >= 0 && static_cast<uint32_t>(nt) < model->textures_count)
+      isData[static_cast<uint32_t>(nt)] = 1;
+    int oc = mat->occlusion_texture.index;
+    if (oc >= 0 && static_cast<uint32_t>(oc) < model->textures_count)
+      isData[static_cast<uint32_t>(oc)] = 1;
+  }
+
   for (uint32_t ti = 0; ti < model->textures_count; ++ti) {
     const tg3_texture *tex = &model->textures[ti];
     const tg3_sampler *sampler = nullptr;
     if (tex->sampler >= 0 &&
         static_cast<uint32_t>(tex->sampler) < model->samplers_count) {
       sampler = &model->samplers[tex->sampler];
+    }
+
+    bool linear = isData[ti] && !isColor[ti];
+    if (isData[ti] && isColor[ti]) {
+      spdlog::warn("texture {} used as both color and data, keeping sRGB", ti);
     }
 
     if (tex->source < 0 ||
@@ -288,9 +311,14 @@ static uint32_t loadGltfTextures(AssetStore &store,
       const uint8_t *data = buf->data.data + bv->byte_offset;
       size_t size = bv->byte_length;
 
-      Texture t = createTextureFromMemory(store.device(), data, size, sampler);
-      spdlog::debug("loaded glTF texture {} from image {} ({} bytes) -> {}x{}",
-                    ti, tex->source, size, t.width, t.height);
+      Texture t =
+          linear ? createTextureFromMemoryLinear(store.device(), data, size,
+                                                 sampler)
+                 : createTextureFromMemory(store.device(), data, size, sampler);
+      spdlog::debug("loaded glTF texture {} from image {} ({} bytes, {}) "
+                    "-> {}x{}",
+                    ti, tex->source, size, linear ? "linear" : "srgb", t.width,
+                    t.height);
       store.addTexture(t);
     } else {
       spdlog::warn("texture {} image {} has no buffer view, using white", ti,
@@ -302,12 +330,18 @@ static uint32_t loadGltfTextures(AssetStore &store,
   return base;
 }
 
-static uint32_t resolveBaseColorTextureIndex(int texIdx, uint32_t textureBase,
-                                             uint32_t textureCount,
-                                             uint32_t fallbackIndex) {
-  if (texIdx < 0 || static_cast<uint32_t>(texIdx) >= textureCount)
+static uint32_t resolveTextureIndex(int texIdx, uint32_t textureBase,
+                                    uint32_t textureCount,
+                                    uint32_t fallbackIndex, int materialIdx,
+                                    const char *slot) {
+  if (texIdx < 0)
     return fallbackIndex;
-  return textureBase + texIdx;
+  if (static_cast<uint32_t>(texIdx) >= textureCount) {
+    spdlog::warn("material {} {} texture {} out of range, using fallback",
+                 materialIdx, slot, texIdx);
+    return fallbackIndex;
+  }
+  return textureBase + static_cast<uint32_t>(texIdx);
 }
 
 static std::vector<ModelPart> buildParts(AssetStore &store,
@@ -388,6 +422,8 @@ static std::vector<ModelPart> buildParts(AssetStore &store,
             idxBytes, static_cast<uint32_t>(idxAcc->count), idxType);
 
         uint32_t texIndex = store.whiteTexture().index;
+        uint32_t mrIndex = store.whiteTexture().index;
+        uint32_t normalIndex = store.flatNormalTexture().index;
         float baseColorFactor[4] = {1.0f, 1.0f, 1.0f, 1.0f};
         float metallicFactor = 0.0f;
         float roughnessFactor = 1.0f;
@@ -408,16 +444,17 @@ static std::vector<ModelPart> buildParts(AssetStore &store,
           roughnessFactor =
               static_cast<float>(mat->pbr_metallic_roughness.roughness_factor);
 
-          int texIdx = mat->pbr_metallic_roughness.base_color_texture.index;
-          if (texIdx >= 0 &&
-              static_cast<uint32_t>(texIdx) >= modelTextureCount) {
-            spdlog::warn("material {} baseColorTexture {} out of range, using "
-                         "white fallback",
-                         prim->material, texIdx);
-          }
-          texIndex = resolveBaseColorTextureIndex(texIdx, textureBase,
-                                                  modelTextureCount,
-                                                  store.whiteTexture().index);
+          texIndex = resolveTextureIndex(
+              mat->pbr_metallic_roughness.base_color_texture.index, textureBase,
+              modelTextureCount, store.whiteTexture().index, prim->material,
+              "baseColor");
+          mrIndex = resolveTextureIndex(
+              mat->pbr_metallic_roughness.metallic_roughness_texture.index,
+              textureBase, modelTextureCount, store.whiteTexture().index,
+              prim->material, "metallicRoughness");
+          normalIndex = resolveTextureIndex(
+              mat->normal_texture.index, textureBase, modelTextureCount,
+              store.flatNormalTexture().index, prim->material, "normal");
 
           bool alphaModeBlend = mat->alpha_mode.data != nullptr &&
                                 strncmp(mat->alpha_mode.data, "BLEND", 5) == 0;
@@ -432,6 +469,8 @@ static std::vector<ModelPart> buildParts(AssetStore &store,
         part.mesh = meshHandle;
         part.material = Material{
             .texture = TextureHandle{texIndex},
+            .metallicRoughness = TextureHandle{mrIndex},
+            .normal = TextureHandle{normalIndex},
             .baseColorFactor = {baseColorFactor[0], baseColorFactor[1],
                                 baseColorFactor[2], baseColorFactor[3]},
             .doubleSided = doubleSided,

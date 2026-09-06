@@ -4,6 +4,7 @@
 #include "src/math/Mat4.hpp"
 #include "src/math/Vec4.hpp"
 #include "src/render/allocator.hpp"
+#include "src/scene/material.hpp"
 
 #include <span>
 #include <vector>
@@ -189,11 +190,14 @@ struct MaterialSets {
   VkDescriptorPool pool = VK_NULL_HANDLE;
   std::vector<VkDescriptorSet> sets;
   std::vector<VkDescriptorSet> bakeSets;
-  uint32_t textureCount = 0;
+  uint32_t materialCount = 0;
+  std::vector<Material> keys;
 
-  VkDescriptorSet get(uint32_t frame, uint32_t texIdx) const {
-    return sets[frame * textureCount + texIdx];
+  VkDescriptorSet get(uint32_t frame, uint32_t matIdx) const {
+    return sets[frame * materialCount + matIdx];
   }
+  VkDescriptorSet getBake(uint32_t matIdx) const { return bakeSets[matIdx]; }
+  uint32_t find(const Material &m) const;
 };
 
 struct EnvSets {
@@ -219,9 +223,10 @@ struct SplitDescriptors {
 
 SplitDescriptors createSplitDescriptors(
     VkDevice device, const std::vector<Texture> &textures,
-    CameraUniformBuffer *cameras, LightUniformBuffer *lights,
-    MaterialUniformBuffer *materials, ObjectUniformBuffer *objects,
-    SsrUniformBuffer *ssrUbos, std::span<const ProbeUniformBuffer> probes,
+    std::span<const Material> uniqueMaterials, CameraUniformBuffer *cameras,
+    LightUniformBuffer *lights, MaterialUniformBuffer *materials,
+    ObjectUniformBuffer *objects, SsrUniformBuffer *ssrUbos,
+    std::span<const ProbeUniformBuffer> probes,
     const CameraUniformBuffer &bakeCamera, const LightUniformBuffer &bakeLights,
     const MaterialUniformBuffer &bakeMaterials,
     const ObjectUniformBuffer &bakeObjects, VkSampler sceneSampler,

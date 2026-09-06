@@ -15,7 +15,9 @@ struct ObjectData {
     uint materialId;
 };
 
-layout(set = 1, binding = 0) uniform sampler2D texSampler;
+layout(set = 1, binding = 0) uniform sampler2D baseTex;
+layout(set = 1, binding = 1) uniform sampler2D mrTex;
+layout(set = 1, binding = 2) uniform sampler2D normalTex;
 layout(set = 0, binding = 1) uniform LightData {
     vec3 lightPos;
     vec3 lightColor;
@@ -23,7 +25,7 @@ layout(set = 0, binding = 1) uniform LightData {
 layout(set = 0, binding = 3) uniform Objects {
     ObjectData data[512];
 } objects;
-layout(set = 1, binding = 1) uniform Materials {
+layout(set = 1, binding = 3) uniform Materials {
     MaterialData data[512];
 } materials;
 layout(set = 3, binding = 0) uniform sampler2D sceneSampler;
@@ -76,17 +78,45 @@ vec3 fallbackReflection(vec3 P, vec3 R) {
     return skyColor(R);
 }
 
+vec3 perturbNormalT(vec2 uv, vec3 N, vec3 P, vec3 mapN) {
+    if (dot(mapN.xy, mapN.xy) < 1e-6) {
+        return normalize(N);
+    }
+    vec3 q0 = dFdx(P);
+    vec3 q1 = dFdy(P);
+    vec2 st0 = dFdx(uv);
+    vec2 st1 = dFdy(uv);
+    vec3 S = q0 * st1.t - q1 * st0.t;
+    vec3 T = -q0 * st1.s + q1 * st0.s;
+    vec3 N2 = normalize(N);
+    S = S - N2 * dot(S, N2);
+    T = T - N2 * dot(T, N2);
+    float lS = length(S);
+    float lT = length(T);
+    if (lS < 1e-8 || lT < 1e-8) {
+        return N2;
+    }
+    S /= lS;
+    T /= lT;
+    float det = dot(cross(S, T), N2);
+    T *= sign(det + 1e-8);
+    mat3 TBN = mat3(S, T, N2);
+    return normalize(TBN * normalize(mapN));
+}
+
 void main() {
     ObjectData obj = objects.data[objectIdx];
     MaterialData material = materials.data[obj.materialId];
 
-    vec4 sampled = texture(texSampler, fragUV);
+    vec4 sampled = texture(baseTex, fragUV);
     vec4 base = sampled * material.baseColor;
     vec3 albedo = base.rgb;
-    float metallic = clamp(material.metallic, 0.0, 1.0);
-    float roughness = clamp(material.roughness, 0.04, 1.0);
+    vec2 mr = texture(mrTex, fragUV).gb;
+    float metallic = clamp(mr.y * material.metallic, 0.0, 1.0);
+    float roughness = clamp(mr.x * material.roughness, 0.04, 1.0);
 
-    vec3 N = normalize(fragNormal);
+    vec3 mapN = texture(normalTex, fragUV).rgb * 2.0 - 1.0;
+    vec3 N = perturbNormalT(fragUV, normalize(fragNormal), fragPos, mapN);
     vec3 V = normalize(viewPos - fragPos);
     vec3 L = normalize(lightData.lightPos - fragPos);
     float NdotL = clamp(dot(N, L), 0.0, 1.0);

@@ -9,8 +9,11 @@ AssetStore::AssetStore(const Device &dev) : m_dev(dev) { createBuiltins(); }
 void AssetStore::createBuiltins() {
   uint8_t white[4] = {255, 255, 255, 255};
   uint8_t yellow[4] = {255, 230, 64, 255};
+  uint8_t flatNormal[4] = {128, 128, 255, 255};
   m_textures.push_back(createTextureFromPixels(m_dev, 1, 1, white));
   m_textures.push_back(createTextureFromPixels(m_dev, 1, 1, yellow));
+  m_textures.push_back(
+      createTextureFromPixelsLinear(m_dev, 1, 1, flatNormal));
 
   std::vector<Vertex> verts;
   verts.reserve(24);
@@ -59,7 +62,9 @@ void AssetStore::createBuiltins() {
   m_models.push_back(Model{
       .parts = {ModelPart{
           .mesh = cube,
-          .material = Material{.texture = yellowTexture()},
+          .material = Material{.texture = yellowTexture(),
+                               .metallicRoughness = whiteTexture(),
+                               .normal = flatNormalTexture()},
           .local = Mat4::IDENTITY,
       }},
   });

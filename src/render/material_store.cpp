@@ -2,6 +2,7 @@
 
 bool materialsEqual(const Material &a, const Material &b) {
   return a.texture == b.texture &&
+         a.metallicRoughness == b.metallicRoughness && a.normal == b.normal &&
          a.baseColorFactor.x == b.baseColorFactor.x &&
          a.baseColorFactor.y == b.baseColorFactor.y &&
          a.baseColorFactor.z == b.baseColorFactor.z &&

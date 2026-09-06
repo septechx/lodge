@@ -11,18 +11,18 @@
 
 #include <cstring>
 
-static Texture createTexture(Device device, int width, int height,
-                             VkSampler sampler) {
+static Texture createTextureWithFormat(Device device, int width, int height,
+                                         VkSampler sampler, VkFormat format) {
   AllocatedImage img =
       createImage(device, static_cast<uint32_t>(width),
-                  static_cast<uint32_t>(height), VK_FORMAT_R8G8B8A8_SRGB,
+                  static_cast<uint32_t>(height), format,
                   VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_SAMPLED_BIT);
 
   VkImageViewCreateInfo vi = {
       .sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO,
       .image = img.image,
       .viewType = VK_IMAGE_VIEW_TYPE_2D,
-      .format = VK_FORMAT_R8G8B8A8_SRGB,
+      .format = format,
       .subresourceRange = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1},
   };
   VkImageView view;
@@ -37,6 +37,12 @@ static Texture createTexture(Device device, int width, int height,
       static_cast<uint32_t>(width),
       static_cast<uint32_t>(height),
   };
+}
+
+static Texture createTexture(Device device, int width, int height,
+                             VkSampler sampler) {
+  return createTextureWithFormat(device, width, height, sampler,
+                                 VK_FORMAT_R8G8B8A8_SRGB);
 }
 
 static VkSampler createDefaultSampler(VkDevice device) {
@@ -260,16 +266,47 @@ Texture createTextureFromPixels(const Device &dev, uint32_t width,
   return tex;
 }
 
-Texture createTextureFromMemory(const Device &dev, const uint8_t *data,
-                                size_t size, const tg3_sampler *sampler) {
+Texture createTextureFromPixelsLinear(const Device &dev, uint32_t width,
+                                      uint32_t height, const uint8_t *pixels) {
+  VkDeviceSize texSize = static_cast<VkDeviceSize>(width * height * 4);
+  AllocatedBuffer staging =
+      createBuffer(dev, texSize, VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
+                   VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT |
+                       VK_MEMORY_PROPERTY_HOST_COHERENT_BIT);
+  void *dst = nullptr;
+  CHECK_VK(vkMapMemory(dev.device, staging.memory, 0, texSize, 0, &dst),
+           "map staging pixels linear");
+  memcpy(dst, pixels, static_cast<size_t>(texSize));
+  vkUnmapMemory(dev.device, staging.memory);
+
+  VkSampler sampler = createDefaultSampler(dev.device);
+  Texture tex = createTextureWithFormat(dev, static_cast<int>(width),
+                                        static_cast<int>(height), sampler,
+                                        VK_FORMAT_R8G8B8A8_UNORM);
+  uploadPixels(dev.device, dev.queue, dev.queueFamily, tex, staging.buffer);
+
+  vkDestroyBuffer(dev.device, staging.buffer, nullptr);
+  vkFreeMemory(dev.device, staging.memory, nullptr);
+  return tex;
+}
+
+static Texture createTextureFromMemoryWithFormat(const Device &dev,
+                                                 const uint8_t *data,
+                                                 size_t size,
+                                                 const tg3_sampler *sampler,
+                                                 VkFormat format,
+                                                 const char *debugName) {
   int w, h;
   unsigned char *pixels =
       stbi_load_from_memory(data, static_cast<int>(size), &w, &h, nullptr, 4);
   if (!pixels) {
-    spdlog::error("stb_image failed from memory: {}", stbi_failure_reason());
+    spdlog::error("stb_image failed from memory ({}): {}",
+                  debugName != nullptr ? debugName : "glTF",
+                  stbi_failure_reason());
     exit(1);
   }
-  spdlog::debug("texture from memory ({}x{} RGBA, {} bytes)", w, h, size);
+  spdlog::debug("texture from memory {} ({}x{} RGBA, {} bytes)",
+                debugName != nullptr ? debugName : "", w, h, size);
   VkDeviceSize texSize = static_cast<VkDeviceSize>(w * h * 4);
 
   AllocatedBuffer staging =
@@ -283,13 +320,25 @@ Texture createTextureFromMemory(const Device &dev, const uint8_t *data,
   vkUnmapMemory(dev.device, staging.memory);
 
   VkSampler vkSampler = createSamplerForGltf(dev.device, sampler);
-  Texture tex = createTexture(dev, w, h, vkSampler);
+  Texture tex = createTextureWithFormat(dev, w, h, vkSampler, format);
   uploadPixels(dev.device, dev.queue, dev.queueFamily, tex, staging.buffer);
 
   vkDestroyBuffer(dev.device, staging.buffer, nullptr);
   vkFreeMemory(dev.device, staging.memory, nullptr);
   stbi_image_free(pixels);
   return tex;
+}
+
+Texture createTextureFromMemory(const Device &dev, const uint8_t *data,
+                                size_t size, const tg3_sampler *sampler) {
+  return createTextureFromMemoryWithFormat(dev, data, size, sampler,
+                                           VK_FORMAT_R8G8B8A8_SRGB, "srgb");
+}
+
+Texture createTextureFromMemoryLinear(const Device &dev, const uint8_t *data,
+                                      size_t size, const tg3_sampler *sampler) {
+  return createTextureFromMemoryWithFormat(dev, data, size, sampler,
+                                           VK_FORMAT_R8G8B8A8_UNORM, "linear");
 }
 
 Texture createWhiteTexture(const Device &dev) {

@@ -212,11 +212,32 @@ void Renderer::initScene(const AssetStore &assets, const FrameScene &frame) {
     m_probeBoxes.back().mapped->count = boxCount;
   }
 
+  std::vector<Material> uniqueMaterials;
+  uniqueMaterials.reserve(frame.objects.size());
+  for (const RenderObject &object : frame.objects) {
+    bool seen = false;
+    for (const Material &m : uniqueMaterials) {
+      if (materialsEqual(m, object.material)) {
+        seen = true;
+        break;
+      }
+    }
+    if (!seen)
+      uniqueMaterials.push_back(object.material);
+  }
+  if (uniqueMaterials.empty()) {
+    uniqueMaterials.push_back(Material{
+        .texture = assets.whiteTexture(),
+        .metallicRoughness = assets.whiteTexture(),
+        .normal = assets.flatNormalTexture(),
+    });
+  }
+
   m_sets = createSplitDescriptors(
-      m_dev.device, assets.textures(), m_cameraUniforms, m_lights, m_materials,
-      m_objects, m_ssrUbos, m_probeBoxes, m_bakeCamera, m_bakeLights,
-      m_bakeMaterials, m_bakeObjects, m_grabSampler, m_grab.view, m_envSampler,
-      envViews, m_grabSampler, m_grabNormal.view, m_depthSampler,
+      m_dev.device, assets.textures(), uniqueMaterials, m_cameraUniforms,
+      m_lights, m_materials, m_objects, m_ssrUbos, m_probeBoxes, m_bakeCamera,
+      m_bakeLights, m_bakeMaterials, m_bakeObjects, m_grabSampler, m_grab.view,
+      m_envSampler, envViews, m_grabSampler, m_grabNormal.view, m_depthSampler,
       m_grabDepth.view, m_ssrSampler, m_ssr.view);
 
   if (!frame.lights.empty()) {

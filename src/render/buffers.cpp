@@ -3,6 +3,7 @@
 #include "src/consts.hpp"
 #include "src/render/allocator.hpp"
 #include "src/render/cube.hpp"
+#include "src/render/material_store.hpp"
 #include "src/render/utils.hpp"
 #include "src/utils.hpp"
 
@@ -264,11 +265,20 @@ void destroyEnvCube(VkDevice device, EnvCube &env) {
   env = EnvCube{};
 }
 
+uint32_t MaterialSets::find(const Material &m) const {
+  for (uint32_t i = 0; i < keys.size(); ++i) {
+    if (materialsEqual(keys[i], m))
+      return i;
+  }
+  return 0;
+}
+
 SplitDescriptors createSplitDescriptors(
     VkDevice device, const std::vector<Texture> &textures,
-    CameraUniformBuffer *cameras, LightUniformBuffer *lights,
-    MaterialUniformBuffer *materials, ObjectUniformBuffer *objects,
-    SsrUniformBuffer *ssrUbos, std::span<const ProbeUniformBuffer> probes,
+    std::span<const Material> uniqueMaterials, CameraUniformBuffer *cameras,
+    LightUniformBuffer *lights, MaterialUniformBuffer *materials,
+    ObjectUniformBuffer *objects, SsrUniformBuffer *ssrUbos,
+    std::span<const ProbeUniformBuffer> probes,
     const CameraUniformBuffer &bakeCamera, const LightUniformBuffer &bakeLights,
     const MaterialUniformBuffer &bakeMaterials,
     const ObjectUniformBuffer &bakeObjects, VkSampler sceneSampler,
@@ -279,6 +289,7 @@ SplitDescriptors createSplitDescriptors(
   LDG_ASSERT(!textures.empty());
   LDG_ASSERT(!envViews.empty());
   LDG_ASSERT(probes.size() == envViews.size());
+  LDG_ASSERT(!uniqueMaterials.empty());
 
   // Set 0 Frame: camera b0, light b1, ssrParams b2, objects b3
   VkDescriptorSetLayoutBinding frameBindings[4] = {
@@ -309,20 +320,28 @@ SplitDescriptors createSplitDescriptors(
       vkCreateDescriptorSetLayout(device, &frameLci, nullptr, &frameLayout),
       "create frame set layout");
 
-  // Set 1 Material: texture b0, materials b1
-  VkDescriptorSetLayoutBinding materialBindings[2] = {
+  // Set 1 Material: baseColor b0, metallicRoughness b1, normal b2, materials b3
+  VkDescriptorSetLayoutBinding materialBindings[4] = {
       {.binding = 0,
        .descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
        .descriptorCount = 1,
        .stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT},
       {.binding = 1,
+       .descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
+       .descriptorCount = 1,
+       .stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT},
+      {.binding = 2,
+       .descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
+       .descriptorCount = 1,
+       .stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT},
+      {.binding = 3,
        .descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,
        .descriptorCount = 1,
        .stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT},
   };
   VkDescriptorSetLayoutCreateInfo materialLci = {
       .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO,
-      .bindingCount = 2,
+      .bindingCount = 4,
       .pBindings = materialBindings,
   };
   VkDescriptorSetLayout materialLayout;
@@ -383,6 +402,7 @@ SplitDescriptors createSplitDescriptors(
            "create pass set layout");
 
   uint32_t textureCount = static_cast<uint32_t>(textures.size());
+  uint32_t materialCount = static_cast<uint32_t>(uniqueMaterials.size());
   uint32_t envCount = static_cast<uint32_t>(envViews.size());
 
   uint32_t frameSetCount = MAX_FRAMES_IN_FLIGHT + 1;
@@ -416,10 +436,10 @@ SplitDescriptors createSplitDescriptors(
       frameAll.begin() + MAX_FRAMES_IN_FLIGHT, frameAll.end());
 
   uint32_t materialSetCount =
-      textureCount * MAX_FRAMES_IN_FLIGHT + textureCount;
+      materialCount * MAX_FRAMES_IN_FLIGHT + materialCount;
   VkDescriptorPoolSize materialPoolSizes[2] = {
       {.type = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
-       .descriptorCount = materialSetCount},
+       .descriptorCount = materialSetCount * 3},
       {.type = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,
        .descriptorCount = materialSetCount},
   };
@@ -446,9 +466,9 @@ SplitDescriptors createSplitDescriptors(
            "alloc material sets");
   std::vector<VkDescriptorSet> materialSets(
       materialAll.begin(),
-      materialAll.begin() + textureCount * MAX_FRAMES_IN_FLIGHT);
+      materialAll.begin() + materialCount * MAX_FRAMES_IN_FLIGHT);
   std::vector<VkDescriptorSet> materialBake(
-      materialAll.begin() + textureCount * MAX_FRAMES_IN_FLIGHT,
+      materialAll.begin() + materialCount * MAX_FRAMES_IN_FLIGHT,
       materialAll.end());
 
   VkDescriptorPoolSize envPoolSizes[2] = {
@@ -558,11 +578,28 @@ SplitDescriptors createSplitDescriptors(
     vkUpdateDescriptorSets(device, 4, writes, 0, nullptr);
   };
 
-  auto writeMaterial = [&](VkDescriptorSet dst, uint32_t texIdx,
+  auto writeMaterial = [&](VkDescriptorSet dst, uint32_t baseIdx,
+                           uint32_t mrIdx, uint32_t normalIdx,
                            VkBuffer matBuf) {
-    VkDescriptorImageInfo imageInfo = {
-        .sampler = textures[texIdx].sampler,
-        .imageView = textures[texIdx].view,
+    auto safeTex = [&](uint32_t idx) -> uint32_t {
+      return idx < textures.size() ? idx : 0;
+    };
+    baseIdx = safeTex(baseIdx);
+    mrIdx = safeTex(mrIdx);
+    normalIdx = safeTex(normalIdx);
+    VkDescriptorImageInfo baseInfo = {
+        .sampler = textures[baseIdx].sampler,
+        .imageView = textures[baseIdx].view,
+        .imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
+    };
+    VkDescriptorImageInfo mrInfo = {
+        .sampler = textures[mrIdx].sampler,
+        .imageView = textures[mrIdx].view,
+        .imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
+    };
+    VkDescriptorImageInfo normalInfo = {
+        .sampler = textures[normalIdx].sampler,
+        .imageView = textures[normalIdx].view,
         .imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
     };
     VkDescriptorBufferInfo materialInfo = {
@@ -570,21 +607,33 @@ SplitDescriptors createSplitDescriptors(
         .offset = 0,
         .range = sizeof(MaterialsBlock),
     };
-    VkWriteDescriptorSet writes[2] = {
+    VkWriteDescriptorSet writes[4] = {
         {.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
          .dstSet = dst,
          .dstBinding = 0,
          .descriptorCount = 1,
          .descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
-         .pImageInfo = &imageInfo},
+         .pImageInfo = &baseInfo},
         {.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
          .dstSet = dst,
          .dstBinding = 1,
          .descriptorCount = 1,
+         .descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
+         .pImageInfo = &mrInfo},
+        {.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
+         .dstSet = dst,
+         .dstBinding = 2,
+         .descriptorCount = 1,
+         .descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
+         .pImageInfo = &normalInfo},
+        {.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
+         .dstSet = dst,
+         .dstBinding = 3,
+         .descriptorCount = 1,
          .descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,
          .pBufferInfo = &materialInfo},
     };
-    vkUpdateDescriptorSets(device, 2, writes, 0, nullptr);
+    vkUpdateDescriptorSets(device, 4, writes, 0, nullptr);
   };
 
   auto writeEnv = [&](VkDescriptorSet dst, uint32_t envIdx, VkBuffer probeBuf) {
@@ -683,11 +732,16 @@ SplitDescriptors createSplitDescriptors(
   writeFrame(frameBake[0], bakeCamera.buffer, bakeLights.buffer,
              ssrUbos[0].buffer, bakeObjects.buffer);
 
-  for (uint32_t t = 0; t < textureCount; ++t) {
+  for (uint32_t m = 0; m < materialCount; ++m) {
+    uint32_t baseIdx = uniqueMaterials[m].texture.index;
+    uint32_t mrIdx = uniqueMaterials[m].metallicRoughness.index;
+    uint32_t normalIdx = uniqueMaterials[m].normal.index;
     for (int f = 0; f < MAX_FRAMES_IN_FLIGHT; ++f) {
-      writeMaterial(materialSets[f * textureCount + t], t, materials[f].buffer);
+      writeMaterial(materialSets[static_cast<size_t>(f) * materialCount + m],
+                    baseIdx, mrIdx, normalIdx, materials[f].buffer);
     }
-    writeMaterial(materialBake[t], t, bakeMaterials.buffer);
+    writeMaterial(materialBake[m], baseIdx, mrIdx, normalIdx,
+                  bakeMaterials.buffer);
   }
 
   for (uint32_t e = 0; e < envCount; ++e) {
@@ -710,7 +764,9 @@ SplitDescriptors createSplitDescriptors(
       .pool = materialPool,
       .sets = std::move(materialSets),
       .bakeSets = std::move(materialBake),
-      .textureCount = textureCount,
+      .materialCount = materialCount,
+      .keys =
+          std::vector<Material>(uniqueMaterials.begin(), uniqueMaterials.end()),
   };
   out.env = EnvSets{
       .layout = envLayout,
