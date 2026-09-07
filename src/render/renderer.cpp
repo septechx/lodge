@@ -10,6 +10,7 @@
 #include "src/render/pipelines/sky.hpp"
 #include "src/render/pipelines/ssr.hpp"
 #include "src/render/pipelines/transparent.hpp"
+#include "src/render/probe_box.hpp"
 #include "src/render/render.hpp"
 #include "src/render/utils.hpp"
 #include "src/utils.hpp"
@@ -23,17 +24,19 @@
 #include <span>
 #include <vector>
 
-static Mat4 cubeInvForFallback(const Mat4 &worldMat) {
-  Vec3 col0{worldMat(0, 0), worldMat(1, 0), worldMat(2, 0)};
-  Vec3 col1{worldMat(0, 1), worldMat(1, 1), worldMat(2, 1)};
-  Vec3 col2{worldMat(0, 2), worldMat(1, 2), worldMat(2, 2)};
+static Mat4 cubeInvForFallback(const Mat4 &worldMat, Vec3 localMin,
+                               Vec3 localMax) {
+  Mat4 boxWorld = boxWorldForFallback(worldMat, localMin, localMax);
+  Vec3 col0{boxWorld(0, 0), boxWorld(1, 0), boxWorld(2, 0)};
+  Vec3 col1{boxWorld(0, 1), boxWorld(1, 1), boxWorld(2, 1)};
+  Vec3 col2{boxWorld(0, 2), boxWorld(1, 2), boxWorld(2, 2)};
   constexpr float kEps = 1e-8f;
   if (col0.length() < kEps || col1.length() < kEps || col2.length() < kEps) {
-    spdlog::warn("degenerate world matrix (zero scale), using identity "
+    spdlog::warn("degenerate proxy box (zero scale), using identity "
                  "cubeInv for fallback reflection");
     return Mat4::IDENTITY;
   }
-  return worldMat.inverse();
+  return boxWorld.inverse();
 }
 
 static void writeMaterialAndObjects(MaterialUniformBuffer &matUbo,
@@ -58,7 +61,8 @@ static void writeMaterialAndObjects(MaterialUniformBuffer &matUbo,
     dst.roughness = m.roughnessFactor;
 
     ObjectData &obj = objUbo.mapped->data[i];
-    obj.cubeInv = cubeInvForFallback(objects[i].worldMat);
+    obj.cubeInv = cubeInvForFallback(objects[i].worldMat, objects[i].localMin,
+                                     objects[i].localMax);
     obj.materialId = id;
   }
 }
@@ -174,9 +178,9 @@ void Renderer::initScene(const AssetStore &assets, const FrameScene &frame) {
 
   m_probes.clear();
   for (const RenderObject &object : frame.objects) {
-    if (object.material.kind != MaterialKind::Transparent) {
-      continue;
-    }
+    // if (object.material.kind != MaterialKind::Transparent) {
+    //   continue;
+    // }
     if (m_probes.size() >= MAX_ENVS) {
       break;
     }

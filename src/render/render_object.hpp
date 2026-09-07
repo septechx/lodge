@@ -11,4 +11,6 @@ struct RenderObject {
   uint32_t indexCount;
   VkIndexType indexType;
   Material material;
+  Vec3 localMin{-1.0f, -1.0f, -1.0f};
+  Vec3 localMax{1.0f, 1.0f, 1.0f};
 };

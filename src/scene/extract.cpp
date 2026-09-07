@@ -22,6 +22,8 @@ FrameScene gatherFrameScene(const Scene &scene, const AssetStore &assets,
             .indexCount = mesh.indexCount,
             .indexType = mesh.indexType,
             .material = part.material,
+            .localMin = mesh.localMin,
+            .localMax = mesh.localMax,
         });
       }
     }

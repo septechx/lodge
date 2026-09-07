@@ -68,8 +68,11 @@ vec3 fallbackReflection(vec3 P, vec3 R) {
         vec3 tmax3 = max(tA, tB);
         float tmin = max(max(tmin3.x, tmin3.y), tmin3.z);
         float tmax = min(min(tmax3.x, tmax3.y), tmax3.z);
-        if (tmin > 1e-4 && tmin < tmax && tmin < bestT) {
-            bestT = tmin;
+        if (tmin < tmax) {
+            float tHit = (tmin > 1e-4) ? tmin : tmax;
+            if (tHit > 1e-4 && tHit < bestT) {
+                bestT = tHit;
+            }
         }
     }
     if (bestT < 1e29) {

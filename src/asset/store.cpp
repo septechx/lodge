@@ -12,8 +12,7 @@ void AssetStore::createBuiltins() {
   uint8_t flatNormal[4] = {128, 128, 255, 255};
   m_textures.push_back(createTextureFromPixels(m_dev, 1, 1, white));
   m_textures.push_back(createTextureFromPixels(m_dev, 1, 1, yellow));
-  m_textures.push_back(
-      createTextureFromPixelsLinear(m_dev, 1, 1, flatNormal));
+  m_textures.push_back(createTextureFromPixelsLinear(m_dev, 1, 1, flatNormal));
 
   std::vector<Vertex> verts;
   verts.reserve(24);
@@ -54,10 +53,10 @@ void AssetStore::createBuiltins() {
     indices.push_back(b + 3);
   }
 
-  MeshHandle cube = createMesh(verts.data(), verts.size() * sizeof(Vertex),
-                               indices.data(), indices.size() * sizeof(uint32_t),
-                               static_cast<uint32_t>(indices.size()),
-                               VK_INDEX_TYPE_UINT32);
+  MeshHandle cube =
+      createMesh(verts.data(), verts.size() * sizeof(Vertex), indices.data(),
+                 indices.size() * sizeof(uint32_t),
+                 static_cast<uint32_t>(indices.size()), VK_INDEX_TYPE_UINT32);
 
   m_models.push_back(Model{
       .parts = {ModelPart{
@@ -73,11 +72,37 @@ void AssetStore::createBuiltins() {
 MeshHandle AssetStore::createMesh(const void *vertices, size_t vertexBytes,
                                   const void *indices, size_t indexBytes,
                                   uint32_t indexCount, VkIndexType indexType) {
+  Vec3 localMin{1e30f, 1e30f, 1e30f};
+  Vec3 localMax{-1e30f, -1e30f, -1e30f};
+  size_t vertexCount = vertexBytes / sizeof(Vertex);
+  if (vertexCount > 0) {
+    const Vertex *verts = static_cast<const Vertex *>(vertices);
+    for (size_t i = 0; i < vertexCount; ++i) {
+      const Vec3 &p = verts[i].position;
+      if (p.x < localMin.x)
+        localMin.x = p.x;
+      if (p.y < localMin.y)
+        localMin.y = p.y;
+      if (p.z < localMin.z)
+        localMin.z = p.z;
+      if (p.x > localMax.x)
+        localMax.x = p.x;
+      if (p.y > localMax.y)
+        localMax.y = p.y;
+      if (p.z > localMax.z)
+        localMax.z = p.z;
+    }
+  } else {
+    localMin = {-1.0f, -1.0f, -1.0f};
+    localMax = {1.0f, 1.0f, 1.0f};
+  }
   m_meshes.push_back(GpuMesh{
       .vbuf = createVertexBuffer(m_dev, vertices, vertexBytes),
       .ibuf = createIndexBuffer(m_dev, indices, indexBytes),
       .indexCount = indexCount,
       .indexType = indexType,
+      .localMin = localMin,
+      .localMax = localMax,
   });
   return MeshHandle{static_cast<uint32_t>(m_meshes.size() - 1)};
 }

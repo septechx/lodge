@@ -14,6 +14,8 @@ struct GpuMesh {
   AllocatedBuffer ibuf;
   uint32_t indexCount;
   VkIndexType indexType;
+  Vec3 localMin{-1.0f, -1.0f, -1.0f};
+  Vec3 localMax{1.0f, 1.0f, 1.0f};
 };
 
 struct ModelPart {
