@@ -4,3 +4,4 @@
 - Box6.glb: by septech, CC0
 - Box2_2.glb: by septech, CC0
 - MetalCube.glb: by septech, CC0
+- Floor.glb: by septech, CC0

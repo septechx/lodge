@@ -80,6 +80,11 @@ void Engine::buildScene() {
   carProp.renderer = ModelRenderer{car};
   carProp.transform.position = Vec3{2.0f, 3.5f, -2.0f};
 
+  ModelHandle floor = loadModel(*m_assets, "models/Floor.glb");
+  GameObject &floorProp = m_scene->create("Car");
+  floorProp.renderer = ModelRenderer{floor};
+  floorProp.transform.position = Vec3{0.0f, -2.5f, 0.0f};
+
   GameObject &camera = m_scene->create("Main Camera");
   camera.camera = CameraParams{};
   m_scene->setMainCamera(camera.id);

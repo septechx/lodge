@@ -134,8 +134,8 @@ void main() {
     float specularStrength = 0.5 * (1.0 - roughness);
     float specPow = mix(128.0, 16.0, roughness);
     vec3 viewDir = normalize(viewPos - fragPos);
-    vec3 reflectDir = reflect(-lightDir, N);
-    float spec = pow(max(dot(viewDir, reflectDir), 0.0), specPow);
+    vec3 halfwayDir = normalize(lightDir + viewDir);
+    float spec = pow(max(dot(N, halfwayDir), 0.0), specPow);
     vec3 specTint = mix(vec3(1.0), albedo, metallic);
     vec3 specular = specularStrength * spec * lightData.lightColor * specTint;
 
