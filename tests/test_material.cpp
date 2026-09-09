@@ -54,6 +54,41 @@ TEST_CASE("MaterialStore dedups identical materials", "[material]") {
   REQUIRE(store.at(0).texture.index == 2);
 }
 
+TEST_CASE("late gizmo material triggers descriptor rebuild", "[material]") {
+  // Regression for brick-textured light gizmo: init-time keys contain only
+  // the brick box material, the gizmo (yellow, white, flat-normal) appears
+  // later via the debug UI.
+  Material brick;
+  brick.texture = TextureHandle{3};
+  brick.metallicRoughness = TextureHandle{4};
+  brick.normal = TextureHandle{5};
+
+  Material gizmo;
+  gizmo.texture = TextureHandle{1};
+  gizmo.metallicRoughness = TextureHandle{0};
+  gizmo.normal = TextureHandle{2};
+
+  REQUIRE_FALSE(materialsEqual(brick, gizmo));
+
+  std::vector<Material> initKeys{brick};
+  REQUIRE_FALSE(materialsContain(initKeys, gizmo));
+
+  std::vector<Material> flat{brick, gizmo};
+  std::vector<Material> currentUnique = collectUniqueMaterials(flat);
+  REQUIRE(currentUnique.size() == 2);
+  REQUIRE(uniqueMaterialsNeedRebuild(initKeys, currentUnique));
+
+  // After rebuild the gizmo must be found at its own index, not fallback 0.
+  std::vector<Material> rebuiltKeys = collectUniqueMaterials(flat);
+  REQUIRE(materialsContain(rebuiltKeys, gizmo));
+  REQUIRE_FALSE(uniqueMaterialsNeedRebuild(rebuiltKeys, currentUnique));
+
+  // Same set in different order needs no rebuild (find is order-insensitive).
+  std::vector<Material> reordered{gizmo, brick};
+  std::vector<Material> reorderedUnique = collectUniqueMaterials(reordered);
+  REQUIRE_FALSE(uniqueMaterialsNeedRebuild(rebuiltKeys, reorderedUnique));
+}
+
 TEST_CASE("groupDraws filters and sorts", "[material]") {
   std::vector<DrawItem> items = {
       {MaterialKind::Transparent, false, 5},

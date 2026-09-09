@@ -63,6 +63,7 @@ private:
   MaterialUniformBuffer m_bakeMaterials;
   ObjectUniformBuffer m_bakeObjects;
   SplitDescriptors m_sets;
+  const AssetStore *m_assets = nullptr;
   GraphicsPipelines m_pipelines;
   ComputePipeline m_ssrPipeline;
   DepthBuffer m_bakeDepth;

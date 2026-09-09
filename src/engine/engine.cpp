@@ -95,6 +95,11 @@ void Engine::buildScene() {
   light.light = LightParams{};
   light.transform.position = Vec3{4.0f, 4.0f, 4.0f};
   light.transform.scale = Vec3{0.2f, 0.2f, 0.2f};
+
+  GameObject &light2 = m_scene->create("Light2");
+  light2.light = LightParams{};
+  light2.transform.position = Vec3{-4.0f, 2.0f, 6.0f};
+  light2.transform.scale = Vec3{0.2f, 0.2f, 0.2f};
 }
 
 void Engine::run() {

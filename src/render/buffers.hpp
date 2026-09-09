@@ -34,6 +34,8 @@ struct CameraUniformBuffer {
 
 CameraUniformBuffer createCameraUniformBuffer(Device device);
 
+#define MAX_LIGHTS 16
+
 struct LightData {
   Vec3 lightPos;
   float _pad0;
@@ -41,10 +43,16 @@ struct LightData {
   float _pad1;
 };
 
+struct LightsBlock {
+  uint32_t count = 0;
+  float _pad[3]{};
+  LightData data[MAX_LIGHTS];
+};
+
 struct LightUniformBuffer {
   VkBuffer buffer;
   VkDeviceMemory memory;
-  LightData *mapped;
+  LightsBlock *mapped;
 };
 
 LightUniformBuffer createLightUniformBuffer(Device device);
@@ -240,5 +248,11 @@ void updatePassResizeDescriptors(VkDevice device, SplitDescriptors &descriptors,
                                  VkSampler depthSampler, VkImageView depthView,
                                  VkSampler ssrSampler, VkImageView ssrView,
                                  VkSampler sceneSampler, VkImageView sceneView);
+
+void rebuildMaterialSets(VkDevice device, SplitDescriptors &descriptors,
+                         const std::vector<Texture> &textures,
+                         std::span<const Material> uniqueMaterials,
+                         MaterialUniformBuffer *materials,
+                         const MaterialUniformBuffer &bakeMaterials);
 
 void destroySplitDescriptors(VkDevice device, SplitDescriptors &descriptors);

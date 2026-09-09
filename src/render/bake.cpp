@@ -124,8 +124,7 @@ void recordBakeFace(VkCommandBuffer cmd, GraphicsPipelines pipelines,
     vkCmdBindVertexBuffers(cmd, 0, 1, &object.vbuf.buffer, &offset);
     vkCmdBindIndexBuffer(cmd, object.ibuf.buffer, 0, object.indexType);
 
-    PushConstants pc{.model = object.worldMat,
-                     .objectIdx = draw.objectIdx};
+    PushConstants pc{.model = object.worldMat, .objectIdx = draw.objectIdx};
     vkCmdPushConstants(cmd, pipelines.opaque.layout, VK_SHADER_STAGE_VERTEX_BIT,
                        0, sizeof(PushConstants), &pc);
 
@@ -184,19 +183,15 @@ void bakeOneFace(Device device, GraphicsPipelines pipelines,
   CHECK_VK(vkResetCommandBuffer(bakeCmd.cmd, 0), "reset bake cmd");
 }
 
-bool tryBakeOneFaceAsync(Device device, GraphicsPipelines pipelines,
-                         std::span<const RenderObject> objects,
-                         const SplitDescriptors &descriptors, EnvCube env,
-                         Vec3 probe, uint32_t face,
-                         CameraUniformBuffer &bakeCamera,
-                         LightUniformBuffer &bakeLights,
-                         MaterialUniformBuffer &bakeMaterials,
-                         ObjectUniformBuffer &bakeObjects,
-                         const LightData *freshLightOrNull,
-                         const MaterialsBlock *freshMaterials,
-                         const ObjectsBlock *freshObjects,
-                         DepthBuffer &bakeDepth, CmdBundle &bakeCmd,
-                         VkFence bakeFence, bool &pending) {
+bool tryBakeOneFaceAsync(
+    Device device, GraphicsPipelines pipelines,
+    std::span<const RenderObject> objects, const SplitDescriptors &descriptors,
+    EnvCube env, Vec3 probe, uint32_t face, CameraUniformBuffer &bakeCamera,
+    LightUniformBuffer &bakeLights, MaterialUniformBuffer &bakeMaterials,
+    ObjectUniformBuffer &bakeObjects, const LightsBlock *freshLights,
+    const MaterialsBlock *freshMaterials, const ObjectsBlock *freshObjects,
+    DepthBuffer &bakeDepth, CmdBundle &bakeCmd, VkFence bakeFence,
+    bool &pending) {
   if (pending) {
     VkResult status = vkGetFenceStatus(device.device, bakeFence);
     if (status == VK_NOT_READY) {
@@ -208,8 +203,8 @@ bool tryBakeOneFaceAsync(Device device, GraphicsPipelines pipelines,
     pending = false;
   }
 
-  if (freshLightOrNull != nullptr) {
-    memcpy(bakeLights.mapped, freshLightOrNull, sizeof(LightData));
+  if (freshLights != nullptr) {
+    memcpy(bakeLights.mapped, freshLights, sizeof(LightsBlock));
   }
   if (freshMaterials != nullptr) {
     memcpy(bakeMaterials.mapped, freshMaterials, sizeof(MaterialsBlock));

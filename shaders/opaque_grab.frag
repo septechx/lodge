@@ -13,13 +13,21 @@ struct ObjectData {
     uint materialId;
 };
 
+struct LightData {
+    vec3 pos;
+    vec3 color;
+};
+
 layout(set = 1, binding = 0) uniform sampler2D baseTex;
 layout(set = 1, binding = 1) uniform sampler2D mrTex;
 layout(set = 1, binding = 2) uniform sampler2D normalTex;
-layout(set = 0, binding = 1) uniform LightData {
-    vec3 lightPos;
-    vec3 lightColor;
-} lightData;
+layout(set = 0, binding = 1) uniform Lights {
+    uint count;
+    float _pad0;
+    float _pad1;
+    float _pad2;
+    LightData data[16];
+} lights;
 layout(set = 0, binding = 3) uniform Objects {
     ObjectData data[512];
 } objects;
@@ -80,17 +88,27 @@ void main() {
     vec3 albedo = base.rgb;
     vec3 diffuseCol = albedo * (1.0 - metallic);
 
-    vec3 lightDir = normalize(lightData.lightPos - fragPos);
-    float diff = max(dot(norm, lightDir), 0.0);
-    vec3 diffuse = diff * lightData.lightColor;
+    vec3 viewDir = normalize(viewPos - fragPos);
 
     float specularStrength = 0.5 * (1.0 - roughness);
     float specPow = mix(128.0, 16.0, roughness);
-    vec3 viewDir = normalize(viewPos - fragPos);
-    vec3 halfwayDir = normalize(lightDir + viewDir);
-    float spec = pow(max(dot(norm, halfwayDir), 0.0), specPow);
     vec3 specTint = mix(vec3(1.0), albedo, metallic);
-    vec3 specular = specularStrength * spec * lightData.lightColor * specTint;
+
+    vec3 diffuse = vec3(0.0);
+    vec3 specular = vec3(0.0);
+
+    for (uint i = 0; i < lights.count; ++i) {
+        LightData light = lights.data[i];
+
+        vec3 lightDir = normalize(light.pos - fragPos);
+
+        float diff = max(dot(norm, lightDir), 0.0);
+        diffuse += diff * light.color;
+
+        vec3 halfwayDir = normalize(lightDir + viewDir);
+        float spec = pow(max(dot(norm, halfwayDir), 0.0), specPow);
+        specular += specularStrength * spec * light.color * specTint;
+    }
 
     float ambient = 0.10;
     vec3 result = ambient * diffuseCol + diffuse * diffuseCol + specular;

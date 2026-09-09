@@ -1,6 +1,7 @@
 #include "debug_layer.hpp"
 
 #include "src/asset/store.hpp"
+#include "src/scene/game_object.hpp"
 #include "src/scene/scene.hpp"
 
 #include <imgui.h>
@@ -10,6 +11,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <ranges>
 
 static float radians(float deg) { return deg * (LDG_PI / 180.0f); }
 static float degrees(float rad) { return rad * (180.0f / LDG_PI); }
@@ -250,31 +252,36 @@ void DebugLayer::buildUI(float dt) {
   }
 
   if (ImGui::CollapsingHeader("Lighting", ImGuiTreeNodeFlags_DefaultOpen)) {
-    GameObject *lightObject = m_scene.mainLight();
-    if (lightObject == nullptr) {
-      ImGui::Text("No light in scene");
-    } else {
-      float lp[3] = {lightObject->transform.position.x,
-                     lightObject->transform.position.y,
-                     lightObject->transform.position.z};
+    for (GameObject &lightObject :
+         m_scene.objects() | std::views::filter([](GameObject &object) {
+           return object.light != std::nullopt;
+         })) {
+
+      ImGui::PushID(&lightObject);
+
+      float lp[3] = {lightObject.transform.position.x,
+                     lightObject.transform.position.y,
+                     lightObject.transform.position.z};
       if (ImGui::DragFloat3("Light Pos", lp, 0.1f)) {
-        lightObject->transform.position = Vec3{lp[0], lp[1], lp[2]};
+        lightObject.transform.position = Vec3{lp[0], lp[1], lp[2]};
       }
 
-      bool show = lightObject->renderer.has_value();
+      bool show = lightObject.renderer.has_value();
       if (ImGui::Checkbox("Show Light Gizmo", &show)) {
         if (show) {
-          lightObject->renderer = ModelRenderer{m_assets.gizmoModel()};
+          lightObject.renderer = ModelRenderer{m_assets.gizmoModel()};
         } else {
-          lightObject->renderer = std::nullopt;
+          lightObject.renderer = std::nullopt;
         }
       }
       if (show) {
-        float sz = lightObject->transform.scale.x;
+        float sz = lightObject.transform.scale.x;
         if (ImGui::SliderFloat("Gizmo Size", &sz, 0.05f, 1.0f)) {
-          lightObject->transform.scale = Vec3{sz, sz, sz};
+          lightObject.transform.scale = Vec3{sz, sz, sz};
         }
       }
+
+      ImGui::PopID();
     }
   }
 

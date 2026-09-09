@@ -40,12 +40,3 @@ TEST_CASE("Scene rejects main camera without a camera component", "[Scene]") {
   object.camera = CameraParams{};
   REQUIRE(scene.mainCamera() == &object);
 }
-
-TEST_CASE("Scene main light lookup", "[Scene]") {
-  Scene scene;
-  scene.create("model");
-  GameObject &light = scene.create("Light");
-  light.light = LightParams{};
-
-  REQUIRE(scene.mainLight() == &light);
-}

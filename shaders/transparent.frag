@@ -15,13 +15,21 @@ struct ObjectData {
     uint materialId;
 };
 
+struct LightData {
+    vec3 pos;
+    vec3 color;
+};
+
 layout(set = 1, binding = 0) uniform sampler2D baseTex;
 layout(set = 1, binding = 1) uniform sampler2D mrTex;
 layout(set = 1, binding = 2) uniform sampler2D normalTex;
-layout(set = 0, binding = 1) uniform LightData {
-    vec3 lightPos;
-    vec3 lightColor;
-} lightData;
+layout(set = 0, binding = 1) uniform Lights {
+    uint count;
+    float _pad0;
+    float _pad1;
+    float _pad2;
+    LightData data[16];
+} lights;
 layout(set = 0, binding = 3) uniform Objects {
     ObjectData data[512];
 } objects;
@@ -121,28 +129,49 @@ void main() {
     vec3 mapN = texture(normalTex, fragUV).rgb * 2.0 - 1.0;
     vec3 N = perturbNormalT(fragUV, normalize(fragNormal), fragPos, mapN);
     vec3 V = normalize(viewPos - fragPos);
-    vec3 L = normalize(lightData.lightPos - fragPos);
-    float NdotL = clamp(dot(N, L), 0.0, 1.0);
+
     float NdotV = clamp(dot(N, V), 0.0, 1.0);
-    vec3 H = normalize(V + L);
-    float NdotH = clamp(dot(N, H), 0.0, 1.0);
-    float VdotH = clamp(dot(V, H), 0.0, 1.0);
 
     float F0diel = pow((material.ior - 1.0) / (material.ior + 1.0), 2.0);
     vec3 F0 = mix(vec3(F0diel), albedo, metallic);
 
     float a = roughness * roughness;
     float a2 = a * a;
-    float denom = NdotH * NdotH * (a2 - 1.0) + 1.0;
-    float D = a2 / (PI * denom * denom);
     float k = (roughness + 1.0) * (roughness + 1.0) / 8.0;
-    float Gv = NdotV / (NdotV * (1.0 - k) + k);
-    float Gl = NdotL / (NdotL * (1.0 - k) + k);
-    float G = Gv * Gl;
-    vec3 F = F0 + (1.0 - F0) * pow(1.0 - VdotH, 5.0);
-    vec3 specDirect = D * G * F / max(4.0 * NdotV * NdotL, 1e-4);
-    vec3 diffDirect = (1.0 - F) * (1.0 - metallic) * albedo / PI;
-    vec3 direct = (diffDirect + specDirect) * lightData.lightColor * NdotL;
+
+    vec3 direct = vec3(0.0);
+
+    for (uint i = 0; i < lights.count; ++i) {
+        LightData light = lights.data[i];
+
+        vec3 L = normalize(light.pos - fragPos);
+        float NdotL = clamp(dot(N, L), 0.0, 1.0);
+
+        if (NdotL <= 0.0) {
+            continue;
+        }
+
+        vec3 H = normalize(V + L);
+        float NdotH = clamp(dot(N, H), 0.0, 1.0);
+        float VdotH = clamp(dot(V, H), 0.0, 1.0);
+
+        float denom = NdotH * NdotH * (a2 - 1.0) + 1.0;
+        float D = a2 / (PI * denom * denom);
+
+        float Gv = NdotV / (NdotV * (1.0 - k) + k);
+        float Gl = NdotL / (NdotL * (1.0 - k) + k);
+        float G = Gv * Gl;
+
+        vec3 F = F0 + (1.0 - F0) * pow(1.0 - VdotH, 5.0);
+
+        vec3 specDirect =
+            D * G * F / max(4.0 * NdotV * NdotL, 1e-4);
+
+        vec3 diffDirect =
+            (1.0 - F) * (1.0 - metallic) * albedo / PI;
+
+        direct += (diffDirect + specDirect) * light.color * NdotL;
+    }
 
     ivec2 grabSize = textureSize(sceneSampler, 0);
     vec2 screenUv = gl_FragCoord.xy / vec2(grabSize);

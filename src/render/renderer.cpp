@@ -67,6 +67,24 @@ static void writeMaterialAndObjects(MaterialUniformBuffer &matUbo,
   }
 }
 
+static void writeLights(LightUniformBuffer &ubo,
+                        std::span<const FrameLight> lights) {
+  ubo.mapped->count = std::min<size_t>(lights.size(), MAX_LIGHTS);
+  for (uint32_t i = 0; i < ubo.mapped->count; ++i)
+    ubo.mapped->data[i] = {.lightPos = lights[i].pos,
+                           .lightColor = lights[i].color};
+}
+
+static std::vector<Material>
+collectUniqueMaterialsFromObjects(std::span<const RenderObject> objects) {
+  std::vector<Material> flat;
+  flat.reserve(objects.size());
+  for (const RenderObject &object : objects) {
+    flat.push_back(object.material);
+  }
+  return collectUniqueMaterials(flat);
+}
+
 Renderer::Renderer(GLFWwindow &window) : m_window(window) {
   m_instance = createInstance();
 
@@ -216,18 +234,14 @@ void Renderer::initScene(const AssetStore &assets, const FrameScene &frame) {
     m_probeBoxes.back().mapped->count = boxCount;
   }
 
-  std::vector<Material> uniqueMaterials;
-  uniqueMaterials.reserve(frame.objects.size());
-  for (const RenderObject &object : frame.objects) {
-    bool seen = false;
-    for (const Material &m : uniqueMaterials) {
-      if (materialsEqual(m, object.material)) {
-        seen = true;
-        break;
-      }
+  std::vector<Material> uniqueMaterials =
+      collectUniqueMaterialsFromObjects(frame.objects);
+  if (!assets.model(assets.gizmoModel()).parts.empty()) {
+    const Material &gizmoMat =
+        assets.model(assets.gizmoModel()).parts[0].material;
+    if (!materialsContain(uniqueMaterials, gizmoMat)) {
+      uniqueMaterials.push_back(gizmoMat);
     }
-    if (!seen)
-      uniqueMaterials.push_back(object.material);
   }
   if (uniqueMaterials.empty()) {
     uniqueMaterials.push_back(Material{
@@ -237,6 +251,7 @@ void Renderer::initScene(const AssetStore &assets, const FrameScene &frame) {
     });
   }
 
+  m_assets = &assets;
   m_sets = createSplitDescriptors(
       m_dev.device, assets.textures(), uniqueMaterials, m_cameraUniforms,
       m_lights, m_materials, m_objects, m_ssrUbos, m_probeBoxes, m_bakeCamera,
@@ -244,20 +259,12 @@ void Renderer::initScene(const AssetStore &assets, const FrameScene &frame) {
       m_envSampler, envViews, m_grabSampler, m_grabNormal.view, m_depthSampler,
       m_grabDepth.view, m_ssrSampler, m_ssr.view);
 
-  if (!frame.lights.empty()) {
-    LightData ld{.lightPos = frame.lights.front().pos,
-                 .lightColor = frame.lights.front().color};
-    for (int f = 0; f < MAX_FRAMES_IN_FLIGHT; ++f)
-      memcpy(m_lights[f].mapped, &ld, sizeof(LightData));
-  } else {
-    LightData ld{.lightPos = {4.0f, 4.0f, 4.0f},
-                 .lightColor = {1.0f, 1.0f, 1.0f}};
-    for (int f = 0; f < MAX_FRAMES_IN_FLIGHT; ++f)
-      memcpy(m_lights[f].mapped, &ld, sizeof(LightData));
-  }
+  for (int f = 0; f < MAX_FRAMES_IN_FLIGHT; ++f)
+    writeLights(m_lights[f], frame.lights);
+
   for (int f = 0; f < MAX_FRAMES_IN_FLIGHT; ++f)
     writeMaterialAndObjects(m_materials[f], m_objects[f], frame.objects);
-  memcpy(m_bakeLights.mapped, m_lights[0].mapped, sizeof(LightData));
+  memcpy(m_bakeLights.mapped, m_lights[0].mapped, sizeof(LightsBlock));
   memcpy(m_bakeMaterials.mapped, m_materials[0].mapped, sizeof(MaterialsBlock));
   memcpy(m_bakeObjects.mapped, m_objects[0].mapped, sizeof(ObjectsBlock));
 
@@ -416,10 +423,20 @@ void Renderer::drawFrame(const FrameScene &frame) {
   };
   memcpy(m_ssrUbos[m_frame].mapped, &ssrData, sizeof(SsrData));
 
-  if (!frame.lights.empty()) {
-    FrameLight light = frame.lights.front();
-    LightData lightData{.lightPos = light.pos, .lightColor = light.color};
-    memcpy(m_lights[m_frame].mapped, &lightData, sizeof(LightData));
+  writeLights(m_lights[m_frame], frame.lights);
+
+  if (m_assets != nullptr && !frame.objects.empty()) {
+    std::vector<Material> currentUnique =
+        collectUniqueMaterialsFromObjects(frame.objects);
+    bool newMaterial =
+        uniqueMaterialsNeedRebuild(m_sets.material.keys, currentUnique);
+    bool newTexture = m_assets->textures().size() != m_sets.textureCount;
+    if ((newMaterial || newTexture) && currentUnique.size() <= MAX_MATERIALS) {
+      spdlog::debug("rebuilding material descriptors for {} materials",
+                    currentUnique.size());
+      rebuildMaterialSets(device, m_sets, m_assets->textures(), currentUnique,
+                          m_materials, m_bakeMaterials);
+    }
   }
 
   writeMaterialAndObjects(m_materials[m_frame], m_objects[m_frame],
@@ -494,8 +511,7 @@ void Renderer::drawFrame(const FrameScene &frame) {
     uint32_t envIdx = slot / facesPerEnv;
     uint32_t face = slot % facesPerEnv;
     if (envIdx < m_envs.size() && envIdx < m_probes.size()) {
-      const LightData *freshLight =
-          frame.lights.empty() ? nullptr : m_lights[m_frame].mapped;
+      const LightsBlock *freshLight = m_lights[m_frame].mapped;
       bool submitted = tryBakeOneFaceAsync(
           m_dev, m_pipelines, frame.objects, m_sets, m_envs[envIdx],
           m_probes[envIdx], face, m_bakeCamera, m_bakeLights, m_bakeMaterials,

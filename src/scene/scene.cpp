@@ -52,19 +52,3 @@ const GameObject *Scene::mainCamera() const {
     return object;
   return nullptr;
 }
-
-GameObject *Scene::mainLight() {
-  for (GameObject &object : m_objects) {
-    if (object.light.has_value())
-      return &object;
-  }
-  return nullptr;
-}
-
-const GameObject *Scene::mainLight() const {
-  for (const GameObject &object : m_objects) {
-    if (object.light.has_value())
-      return &object;
-  }
-  return nullptr;
-}

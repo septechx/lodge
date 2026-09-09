@@ -51,16 +51,16 @@ CameraUniformBuffer createCameraUniformBuffer(Device device) {
 }
 
 LightUniformBuffer createLightUniformBuffer(Device device) {
-  AllocatedBuffer buf = createBuffer(device, sizeof(LightData),
+  AllocatedBuffer buf = createBuffer(device, sizeof(LightsBlock),
                                      VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT,
                                      VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT |
                                          VK_MEMORY_PROPERTY_HOST_COHERENT_BIT);
   void *mapped = nullptr;
-  CHECK_VK(
-      vkMapMemory(device.device, buf.memory, 0, sizeof(LightData), 0, &mapped),
-      "map light uniform");
+  CHECK_VK(vkMapMemory(device.device, buf.memory, 0, sizeof(LightsBlock), 0,
+                       &mapped),
+           "map light uniform");
   return LightUniformBuffer{buf.buffer, buf.memory,
-                            static_cast<LightData *>(mapped)};
+                            static_cast<LightsBlock *>(mapped)};
 }
 
 MaterialUniformBuffer createMaterialUniformBuffer(Device device) {
@@ -537,7 +537,7 @@ SplitDescriptors createSplitDescriptors(
     VkDescriptorBufferInfo lightInfo = {
         .buffer = lightBuf,
         .offset = 0,
-        .range = sizeof(LightData),
+        .range = sizeof(LightsBlock),
     };
     VkDescriptorBufferInfo ssrBufInfo = {
         .buffer = ssrBuf,
@@ -861,4 +861,138 @@ void destroySplitDescriptors(VkDevice device, SplitDescriptors &descriptors) {
   vkDestroyDescriptorPool(device, descriptors.pass.pool, nullptr);
   vkDestroyDescriptorSetLayout(device, descriptors.pass.layout, nullptr);
   descriptors = SplitDescriptors{};
+}
+
+static void writeOneMaterialSet(VkDevice device,
+                                const std::vector<Texture> &textures,
+                                VkDescriptorSet dst, uint32_t baseIdx,
+                                uint32_t mrIdx, uint32_t normalIdx,
+                                VkBuffer matBuf) {
+  auto safeTex = [&](uint32_t idx) -> uint32_t {
+    return idx < textures.size() ? idx : 0;
+  };
+  baseIdx = safeTex(baseIdx);
+  mrIdx = safeTex(mrIdx);
+  normalIdx = safeTex(normalIdx);
+  VkDescriptorImageInfo baseInfo = {
+      .sampler = textures[baseIdx].sampler,
+      .imageView = textures[baseIdx].view,
+      .imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
+  };
+  VkDescriptorImageInfo mrInfo = {
+      .sampler = textures[mrIdx].sampler,
+      .imageView = textures[mrIdx].view,
+      .imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
+  };
+  VkDescriptorImageInfo normalInfo = {
+      .sampler = textures[normalIdx].sampler,
+      .imageView = textures[normalIdx].view,
+      .imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
+  };
+  VkDescriptorBufferInfo materialInfo = {
+      .buffer = matBuf,
+      .offset = 0,
+      .range = sizeof(MaterialsBlock),
+  };
+  VkWriteDescriptorSet writes[4] = {
+      {.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
+       .dstSet = dst,
+       .dstBinding = 0,
+       .descriptorCount = 1,
+       .descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
+       .pImageInfo = &baseInfo},
+      {.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
+       .dstSet = dst,
+       .dstBinding = 1,
+       .descriptorCount = 1,
+       .descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
+       .pImageInfo = &mrInfo},
+      {.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
+       .dstSet = dst,
+       .dstBinding = 2,
+       .descriptorCount = 1,
+       .descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
+       .pImageInfo = &normalInfo},
+      {.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
+       .dstSet = dst,
+       .dstBinding = 3,
+       .descriptorCount = 1,
+       .descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,
+       .pBufferInfo = &materialInfo},
+  };
+  vkUpdateDescriptorSets(device, 4, writes, 0, nullptr);
+}
+
+void rebuildMaterialSets(VkDevice device, SplitDescriptors &descriptors,
+                         const std::vector<Texture> &textures,
+                         std::span<const Material> uniqueMaterials,
+                         MaterialUniformBuffer *materials,
+                         const MaterialUniformBuffer &bakeMaterials) {
+  LDG_ASSERT(!uniqueMaterials.empty());
+  LDG_ASSERT(uniqueMaterials.size() <= MAX_MATERIALS);
+  LDG_ASSERT(!textures.empty());
+  LDG_ASSERT(descriptors.material.layout != VK_NULL_HANDLE);
+
+  CHECK_VK(vkDeviceWaitIdle(device), "wait idle for material rebuild");
+
+  vkDestroyDescriptorPool(device, descriptors.material.pool, nullptr);
+
+  uint32_t materialCount = static_cast<uint32_t>(uniqueMaterials.size());
+  uint32_t materialSetCount =
+      materialCount * MAX_FRAMES_IN_FLIGHT + materialCount;
+  VkDescriptorPoolSize materialPoolSizes[2] = {
+      {.type = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
+       .descriptorCount = materialSetCount * 3},
+      {.type = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,
+       .descriptorCount = materialSetCount},
+  };
+  VkDescriptorPoolCreateInfo materialPci = {
+      .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO,
+      .maxSets = materialSetCount,
+      .poolSizeCount = 2,
+      .pPoolSizes = materialPoolSizes,
+  };
+  VkDescriptorPool materialPool;
+  CHECK_VK(vkCreateDescriptorPool(device, &materialPci, nullptr, &materialPool),
+           "recreate material pool");
+
+  std::vector<VkDescriptorSetLayout> materialLayouts(
+      materialSetCount, descriptors.material.layout);
+  VkDescriptorSetAllocateInfo materialAi = {
+      .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO,
+      .descriptorPool = materialPool,
+      .descriptorSetCount = materialSetCount,
+      .pSetLayouts = materialLayouts.data(),
+  };
+  std::vector<VkDescriptorSet> materialAll(materialSetCount);
+  CHECK_VK(vkAllocateDescriptorSets(device, &materialAi, materialAll.data()),
+           "realloc material sets");
+  std::vector<VkDescriptorSet> materialSets(
+      materialAll.begin(),
+      materialAll.begin() + materialCount * MAX_FRAMES_IN_FLIGHT);
+  std::vector<VkDescriptorSet> materialBake(
+      materialAll.begin() + materialCount * MAX_FRAMES_IN_FLIGHT,
+      materialAll.end());
+
+  for (uint32_t m = 0; m < materialCount; ++m) {
+    uint32_t baseIdx = uniqueMaterials[m].texture.index;
+    uint32_t mrIdx = uniqueMaterials[m].metallicRoughness.index;
+    uint32_t normalIdx = uniqueMaterials[m].normal.index;
+    for (int f = 0; f < MAX_FRAMES_IN_FLIGHT; ++f) {
+      writeOneMaterialSet(
+          device, textures,
+          materialSets[static_cast<size_t>(f) * materialCount + m], baseIdx,
+          mrIdx, normalIdx, materials[f].buffer);
+    }
+    writeOneMaterialSet(device, textures, materialBake[m], baseIdx, mrIdx,
+                        normalIdx, bakeMaterials.buffer);
+  }
+
+  descriptors.material.pool = materialPool;
+  descriptors.material.sets = std::move(materialSets);
+  descriptors.material.bakeSets = std::move(materialBake);
+  descriptors.material.materialCount = materialCount;
+  descriptors.material.keys =
+      std::vector<Material>(uniqueMaterials.begin(), uniqueMaterials.end());
+  descriptors.textureCount = static_cast<uint32_t>(textures.size());
 }

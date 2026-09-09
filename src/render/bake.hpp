@@ -34,7 +34,7 @@ bool tryBakeOneFaceAsync(
     std::span<const RenderObject> objects, const SplitDescriptors &descriptors,
     EnvCube env, Vec3 probe, uint32_t face, CameraUniformBuffer &bakeCamera,
     LightUniformBuffer &bakeLights, MaterialUniformBuffer &bakeMaterials,
-    ObjectUniformBuffer &bakeObjects, const LightData *freshLightOrNull,
+    ObjectUniformBuffer &bakeObjects, const LightsBlock *freshLights,
     const MaterialsBlock *freshMaterials, const ObjectsBlock *freshObjects,
     DepthBuffer &bakeDepth, CmdBundle &bakeCmd, VkFence bakeFence,
     bool &pending);

@@ -22,9 +22,6 @@ public:
   GameObject *mainCamera();
   const GameObject *mainCamera() const;
 
-  GameObject *mainLight();
-  const GameObject *mainLight() const;
-
 private:
   std::deque<GameObject> m_objects;
   uint32_t m_nextId = 1;
