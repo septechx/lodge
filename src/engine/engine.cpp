@@ -8,6 +8,7 @@
 #include "src/core/debug_layer.hpp"
 #include "src/scene/game_object.hpp"
 #include "src/scene/scene.hpp"
+#include "src/script/layer.hpp"
 
 #include <spdlog/spdlog.h>
 
@@ -45,6 +46,8 @@ Engine::Engine(std::vector<std::string> args) {
   m_events->attach(*m_window);
 
   m_layers = std::make_unique<LayerStack>();
+
+  m_layers->pushLayer("scripts", std::make_unique<ScriptLayer>());
 
   m_layers->pushLayer("control", std::make_unique<ControlLayer>(*m_window));
 

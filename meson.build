@@ -13,6 +13,7 @@ deps = [
   dependency('vulkan'),
   dependency('glfw3'),
   dependency('spdlog'),
+  dependency('luajit'),
   dependency('dl'),
 ]
 
@@ -82,6 +83,8 @@ executable(
   'src/render/pipelines/sky.cpp',
   'src/render/pipelines/ssr.cpp',
   'src/debug/renderdoc.cpp',
+  'src/script/manager.cpp',
+  'src/script/layer.cpp',
   deps_sources,
   sources: shader_deps,
   dependencies: deps,
