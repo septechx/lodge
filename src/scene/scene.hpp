@@ -1,11 +1,12 @@
 #pragma once
 
 #include "src/scene/game_object.hpp"
+#include "src/serialize/serialize.hpp"
 
 #include <deque>
 #include <string_view>
 
-class Scene {
+class Scene : public ser::Serializable {
 public:
   GameObject &create(std::string name);
 
@@ -21,6 +22,8 @@ public:
 
   GameObject *mainCamera();
   const GameObject *mainCamera() const;
+
+  ser::Value serializeInfo() const override;
 
 private:
   std::deque<GameObject> m_objects;

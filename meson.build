@@ -85,6 +85,7 @@ executable(
   'src/debug/renderdoc.cpp',
   'src/script/manager.cpp',
   'src/script/layer.cpp',
+  'src/serialize/json.cpp',
   deps_sources,
   sources: shader_deps,
   dependencies: deps,

@@ -1,3 +1,5 @@
+#define TINYGLTF_JSON_C_IMPLEMENTATION
+
 #include "src/engine/engine.hpp"
 
 #include <GLFW/glfw3.h>

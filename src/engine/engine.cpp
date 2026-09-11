@@ -9,7 +9,9 @@
 #include "src/scene/game_object.hpp"
 #include "src/scene/scene.hpp"
 #include "src/script/layer.hpp"
+#include "src/serialize/json.hpp"
 
+#include <print>
 #include <spdlog/spdlog.h>
 
 #include <filesystem>
@@ -103,6 +105,9 @@ void Engine::buildScene() {
   light2.light = LightParams{};
   light2.transform.position = Vec3{-4.0f, 2.0f, 6.0f};
   light2.transform.scale = Vec3{0.2f, 0.2f, 0.2f};
+
+  std::string str = ser::toJson(*m_scene);
+  std::println("SCENE = {}", str);
 }
 
 void Engine::run() {

@@ -1,3 +1,1 @@
-function Update(dt)
-	print("Hello world: ", dt)
-end
+function Update(dt) end
