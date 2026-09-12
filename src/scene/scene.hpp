@@ -6,7 +6,7 @@
 #include <deque>
 #include <string_view>
 
-class Scene : public ser::Serializable {
+class Scene : public ser::Serializable, public ser::Deserialazable {
 public:
   GameObject &create(std::string name);
 
@@ -23,7 +23,8 @@ public:
   GameObject *mainCamera();
   const GameObject *mainCamera() const;
 
-  ser::Value serializeInfo() const override;
+  ser::Value serialize() const override;
+  void deserialize(ser::Value value) override;
 
 private:
   std::deque<GameObject> m_objects;

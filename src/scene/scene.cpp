@@ -57,7 +57,7 @@ const GameObject *Scene::mainCamera() const {
   return nullptr;
 }
 
-ser::Value Scene::serializeInfo() const {
+ser::Value Scene::serialize() const {
   auto objects =
       m_objects |
       std::views::transform([](const GameObject &object) -> ser::Value {
@@ -100,4 +100,58 @@ ser::Value Scene::serializeInfo() const {
   return ser::Value::Map{
       {"objects", ser::Value::Array{objects.begin(), objects.end()}},
   };
+}
+
+void Scene::deserialize(ser::Value value) {
+  const auto &objects = value.asMap().at("objects").asArray();
+  m_objects.clear();
+  m_nextId = 1;
+  m_mainCameraId = 0;
+  for (size_t i = 0; i < objects.size(); ++i) {
+    const auto &object = objects[i].asMap();
+    GameObject &objectOut = create(object.at("name").asString());
+
+    const auto &transform = object.at("transform").asMap();
+    const auto &position = transform.at("position").asArray();
+    objectOut.transform.position = {position[0].asReal(), position[1].asReal(),
+                                    position[2].asReal()};
+    const auto &rotation = transform.at("rotation").asArray();
+    objectOut.transform.rotation = {rotation[0].asReal(), rotation[1].asReal(),
+                                    rotation[2].asReal(), rotation[3].asReal()};
+    const auto &scale = transform.at("scale").asArray();
+    objectOut.transform.scale = {scale[0].asReal(), scale[1].asReal(),
+                                 scale[2].asReal()};
+
+    const auto &renderer = object.at("renderer");
+    if (!renderer.isNull()) {
+      const auto &rendererParams = renderer.asMap();
+      objectOut.renderer = ModelRenderer{ModelHandle{
+          static_cast<uint32_t>(rendererParams.at("model").asInt())}};
+    } else {
+      objectOut.renderer.reset();
+    }
+
+    const auto &camera = object.at("camera");
+    if (!camera.isNull()) {
+      const auto &cameraParams = camera.asMap();
+      CameraParams params;
+      params.fovY = cameraParams.at("fovY").asReal();
+      params.nearZ = cameraParams.at("nearZ").asReal();
+      params.farZ = cameraParams.at("farZ").asReal();
+      objectOut.camera = params;
+    } else {
+      objectOut.camera.reset();
+    }
+
+    const auto &light = object.at("light");
+    if (!light.isNull()) {
+      const auto &lightParams = light.asMap();
+      const auto &color = lightParams.at("color").asArray();
+      LightParams params;
+      params.color = {color[0].asReal(), color[1].asReal(), color[2].asReal()};
+      objectOut.light = params;
+    } else {
+      objectOut.light.reset();
+    }
+  }
 }

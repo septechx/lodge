@@ -27,6 +27,27 @@ public:
   Value(Array value) : m_value(std::move(value)) {}
   Value(Map value) : m_value(std::move(value)) {}
 
+  bool isNull() const { return std::get_if<Null>(&m_value) != nullptr; }
+
+  const Bool &asBool() const { return std::get<Bool>(m_value); }
+  Int asInt() const {
+    if (const auto *v = std::get_if<Int>(&m_value))
+      return *v;
+    if (const auto *v = std::get_if<Real>(&m_value))
+      return static_cast<Int>(*v);
+    return std::get<Int>(m_value);
+  }
+  Real asReal() const {
+    if (const auto *v = std::get_if<Real>(&m_value))
+      return *v;
+    if (const auto *v = std::get_if<Int>(&m_value))
+      return static_cast<Real>(*v);
+    return std::get<Real>(m_value);
+  }
+  const String &asString() const { return std::get<String>(m_value); }
+  const Array &asArray() const { return std::get<Array>(m_value); }
+  const Map &asMap() const { return std::get<Map>(m_value); }
+
   template <typename Visitor> decltype(auto) visit(Visitor &&visitor) const {
     return std::visit(std::forward<Visitor>(visitor), m_value);
   }
@@ -39,7 +60,14 @@ class Serializable {
 public:
   virtual ~Serializable() = default;
 
-  virtual Value serializeInfo() const = 0;
+  virtual Value serialize() const = 0;
+};
+
+class Deserialazable {
+public:
+  virtual ~Deserialazable() = default;
+
+  virtual void deserialize(Value value) = 0;
 };
 
 }; // namespace ser
