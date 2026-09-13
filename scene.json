@@ -1,0 +1,80 @@
+{
+  "mainCamera": "Main Camera",
+  "objects": [
+    {
+      "name": "Box6",
+      "renderer": {
+        "model": "models/Box6.glb"
+      }
+    },
+    {
+      "name": "Box6_2",
+      "transform": {
+        "position": [4.0, 0.0, 1.0]
+      },
+      "renderer": {
+        "model": "models/Box6.glb"
+      }
+    },
+    {
+      "name": "Box2",
+      "transform": {
+        "position": [1.0, 0.0, 5.0]
+      },
+      "renderer": {
+        "model": "models/Box2_2.glb"
+      }
+    },
+    {
+      "name": "Box3",
+      "transform": {
+        "position": [2.0, 2.0, -2.0]
+      },
+      "renderer": {
+        "model": "models/MetalCube.glb"
+      }
+    },
+    {
+      "name": "Car",
+      "transform": {
+        "position": [2.0, 3.5, -2.0]
+      },
+      "renderer": {
+        "model": "models/Car3.glb"
+      }
+    },
+    {
+      "name": "Floor",
+      "transform": {
+        "position": [0.0, -2.5, 0.0]
+      },
+      "renderer": {
+        "model": "models/Floor.glb"
+      }
+    },
+    {
+      "name": "Main Camera",
+      "transform": {
+        "position": [0.0, 1.0, 1.0],
+        "rotation": [0.9238795, -0.3826834, 0.0, 0.0]
+      },
+      "camera": {}
+    },
+    {
+      "name": "Light",
+      "transform": {
+        "position": [4.0, 4.0, 4.0],
+        "scale": [0.2, 0.2, 0.2]
+      },
+      "light": {}
+    },
+    {
+      "name": "Light2",
+      "transform": {
+        "position": [-4.0, 2.0, 6.0],
+        "scale": [0.2, 0.2, 0.2]
+      },
+      "light": {}
+    }
+  ]
+}

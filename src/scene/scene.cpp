@@ -58,9 +58,27 @@ const GameObject *Scene::mainCamera() const {
 }
 
 ser::Value Scene::serialize() const {
+  return serializeWithModels(
+      [](ModelHandle) -> std::optional<std::string> { return std::nullopt; });
+}
+
+ser::Value Scene::serializeWithModels(const ModelPathForHandle &pathFor) const {
   auto objects =
       m_objects |
-      std::views::transform([](const GameObject &object) -> ser::Value {
+      std::views::transform([&](const GameObject &object) -> ser::Value {
+        ser::Value rendererValue;
+        if (object.renderer.has_value()) {
+          std::optional<std::string> path;
+          if (pathFor)
+            path = pathFor(object.renderer->model);
+          if (path.has_value()) {
+            rendererValue = ser::Value::Map{{"model", *path}};
+          } else {
+            rendererValue = ser::Value::Map{
+                {"model",
+                 static_cast<ser::Value::Int>(object.renderer->model.index)}};
+          }
+        }
         return ser::Value::Map{
             {"name", object.name},
             {"transform",
@@ -76,12 +94,7 @@ ser::Value Scene::serialize() const {
                                              object.transform.scale.y,
                                              object.transform.scale.z}},
              }},
-            {"renderer",
-             object.renderer.has_value()
-                 ? ser::Value{ser::Value::Map{
-                       {"model", static_cast<ser::Value::Int>(
-                                     object.renderer->model.index)}}}
-                 : ser::Value{}},
+            {"renderer", rendererValue},
             {"camera",
              object.camera.has_value()
                  ? ser::Value{ser::Value::Map{{"fovY", object.camera->fovY},
@@ -97,13 +110,28 @@ ser::Value Scene::serialize() const {
                  : ser::Value{}},
         };
       });
+  ser::Value mainCameraValue;
+  if (m_mainCameraId != 0) {
+    if (const GameObject *cam = find(m_mainCameraId))
+      mainCameraValue = ser::Value{cam->name};
+  }
   return ser::Value::Map{
       {"objects", ser::Value::Array{objects.begin(), objects.end()}},
+      {"mainCamera", mainCameraValue},
   };
 }
 
 void Scene::deserialize(ser::Value value) {
-  const auto &objects = value.asMap().at("objects").asArray();
+  deserializeWithModels(value,
+                        [](const std::string &) -> std::optional<ModelHandle> {
+                          return std::nullopt;
+                        });
+}
+
+void Scene::deserializeWithModels(const ser::Value &value,
+                                  const ModelHandleForPath &handleFor) {
+  const auto &root = value.asMap();
+  const auto &objects = root.at("objects").asArray();
   m_objects.clear();
   m_nextId = 1;
   m_mainCameraId = 0;
@@ -111,47 +139,101 @@ void Scene::deserialize(ser::Value value) {
     const auto &object = objects[i].asMap();
     GameObject &objectOut = create(object.at("name").asString());
 
-    const auto &transform = object.at("transform").asMap();
-    const auto &position = transform.at("position").asArray();
-    objectOut.transform.position = {position[0].asReal(), position[1].asReal(),
-                                    position[2].asReal()};
-    const auto &rotation = transform.at("rotation").asArray();
-    objectOut.transform.rotation = {rotation[0].asReal(), rotation[1].asReal(),
-                                    rotation[2].asReal(), rotation[3].asReal()};
-    const auto &scale = transform.at("scale").asArray();
-    objectOut.transform.scale = {scale[0].asReal(), scale[1].asReal(),
-                                 scale[2].asReal()};
+    auto transformIt = object.find("transform");
+    if (transformIt != object.end() && !transformIt->second.isNull()) {
+      const auto &transform = transformIt->second.asMap();
+      auto posIt = transform.find("position");
+      if (posIt != transform.end() && !posIt->second.isNull()) {
+        const auto &position = posIt->second.asArray();
+        if (position.size() >= 3)
+          objectOut.transform.position = {
+              position[0].asReal(), position[1].asReal(), position[2].asReal()};
+      }
+      auto rotIt = transform.find("rotation");
+      if (rotIt != transform.end() && !rotIt->second.isNull()) {
+        const auto &rotation = rotIt->second.asArray();
+        if (rotation.size() >= 4)
+          objectOut.transform.rotation = {
+              rotation[0].asReal(), rotation[1].asReal(), rotation[2].asReal(),
+              rotation[3].asReal()};
+      }
+      auto scaleIt = transform.find("scale");
+      if (scaleIt != transform.end() && !scaleIt->second.isNull()) {
+        const auto &scale = scaleIt->second.asArray();
+        if (scale.size() >= 3)
+          objectOut.transform.scale = {scale[0].asReal(), scale[1].asReal(),
+                                       scale[2].asReal()};
+      }
+    }
 
-    const auto &renderer = object.at("renderer");
-    if (!renderer.isNull()) {
-      const auto &rendererParams = renderer.asMap();
-      objectOut.renderer = ModelRenderer{ModelHandle{
-          static_cast<uint32_t>(rendererParams.at("model").asInt())}};
+    auto rendererIt = object.find("renderer");
+    if (rendererIt != object.end() && !rendererIt->second.isNull()) {
+      const auto &rendererParams = rendererIt->second.asMap();
+      auto modelIt = rendererParams.find("model");
+      if (modelIt != rendererParams.end() && !modelIt->second.isNull()) {
+        if (modelIt->second.isString()) {
+          std::optional<ModelHandle> resolved;
+          if (handleFor)
+            resolved = handleFor(modelIt->second.asString());
+          if (resolved.has_value())
+            objectOut.renderer = ModelRenderer{*resolved};
+          else
+            objectOut.renderer.reset();
+        } else {
+          objectOut.renderer = ModelRenderer{
+              ModelHandle{static_cast<uint32_t>(modelIt->second.asInt())}};
+        }
+      } else {
+        objectOut.renderer.reset();
+      }
     } else {
       objectOut.renderer.reset();
     }
 
-    const auto &camera = object.at("camera");
-    if (!camera.isNull()) {
-      const auto &cameraParams = camera.asMap();
+    auto cameraIt = object.find("camera");
+    if (cameraIt != object.end() && !cameraIt->second.isNull()) {
+      const auto &cameraParams = cameraIt->second.asMap();
       CameraParams params;
-      params.fovY = cameraParams.at("fovY").asReal();
-      params.nearZ = cameraParams.at("nearZ").asReal();
-      params.farZ = cameraParams.at("farZ").asReal();
+      auto fovIt = cameraParams.find("fovY");
+      if (fovIt != cameraParams.end() && !fovIt->second.isNull())
+        params.fovY = fovIt->second.asReal();
+      auto nearIt = cameraParams.find("nearZ");
+      if (nearIt != cameraParams.end() && !nearIt->second.isNull())
+        params.nearZ = nearIt->second.asReal();
+      auto farIt = cameraParams.find("farZ");
+      if (farIt != cameraParams.end() && !farIt->second.isNull())
+        params.farZ = farIt->second.asReal();
       objectOut.camera = params;
     } else {
       objectOut.camera.reset();
     }
 
-    const auto &light = object.at("light");
-    if (!light.isNull()) {
-      const auto &lightParams = light.asMap();
-      const auto &color = lightParams.at("color").asArray();
+    auto lightIt = object.find("light");
+    if (lightIt != object.end() && !lightIt->second.isNull()) {
+      const auto &lightParams = lightIt->second.asMap();
       LightParams params;
-      params.color = {color[0].asReal(), color[1].asReal(), color[2].asReal()};
+      auto colorIt = lightParams.find("color");
+      if (colorIt != lightParams.end() && !colorIt->second.isNull()) {
+        const auto &color = colorIt->second.asArray();
+        if (color.size() >= 3)
+          params.color = {color[0].asReal(), color[1].asReal(),
+                          color[2].asReal()};
+      }
       objectOut.light = params;
     } else {
       objectOut.light.reset();
+    }
+  }
+
+  auto mainCameraIt = root.find("mainCamera");
+  if (mainCameraIt != root.end() && !mainCameraIt->second.isNull()) {
+    if (mainCameraIt->second.isString()) {
+      if (GameObject *cam = findByName(mainCameraIt->second.asString()))
+        m_mainCameraId = cam->id;
+    } else {
+      uint32_t id = static_cast<uint32_t>(mainCameraIt->second.asInt());
+      if (find(id) != nullptr)
+        m_mainCameraId = id;
     }
   }
 }

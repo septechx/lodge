@@ -65,6 +65,7 @@ executable(
   'src/asset/store.cpp',
   'src/scene/scene.cpp',
   'src/scene/extract.cpp',
+  'src/scene/io.cpp',
   'src/render/allocator.cpp',
   'src/render/init.cpp',
   'src/render/renderer.cpp',

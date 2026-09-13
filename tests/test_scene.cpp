@@ -339,3 +339,133 @@ TEST_CASE("Scene double round-trip is stable", "[Scene]") {
   REQUIRE(cameraOut->camera.has_value());
   REQUIRE(cameraOut->camera->fovY == Catch::Approx(70.0f).margin(1e-6f));
 }
+
+TEST_CASE("Scene round-trip preserves main camera by name", "[Scene]") {
+  Scene scene;
+  GameObject &camera = scene.create("Main Camera");
+  camera.camera = CameraParams{};
+  scene.setMainCamera(camera.id);
+  scene.create("other");
+
+  Scene restored;
+  restored.deserialize(scene.serialize());
+
+  REQUIRE(restored.mainCamera() != nullptr);
+  REQUIRE(restored.mainCamera()->name == "Main Camera");
+}
+
+TEST_CASE("Scene model path round-trip via resolver", "[Scene]") {
+  Scene scene;
+  GameObject &a = scene.create("a");
+  a.renderer = ModelRenderer{ModelHandle{1}};
+  GameObject &b = scene.create("b");
+  b.renderer = ModelRenderer{ModelHandle{2}};
+
+  auto pathFor = [](ModelHandle h) -> std::optional<std::string> {
+    if (h.index == 1)
+      return std::string("models/Box6.glb");
+    if (h.index == 2)
+      return std::string("models/Car3.glb");
+    return std::nullopt;
+  };
+  ser::Value value = scene.serializeWithModels(pathFor);
+
+  const auto &objects = value.asMap().at("objects").asArray();
+  REQUIRE(objects[0].asMap().at("renderer").asMap().at("model").asString() ==
+          "models/Box6.glb");
+  REQUIRE(objects[1].asMap().at("renderer").asMap().at("model").asString() ==
+          "models/Car3.glb");
+
+  auto handleFor = [](const std::string &p) -> std::optional<ModelHandle> {
+    if (p == "models/Box6.glb")
+      return ModelHandle{1};
+    if (p == "models/Car3.glb")
+      return ModelHandle{2};
+    return std::nullopt;
+  };
+  Scene restored;
+  restored.deserializeWithModels(value, handleFor);
+
+  REQUIRE(restored.findByName("a")->renderer->model.index == 1);
+  REQUIRE(restored.findByName("b")->renderer->model.index == 2);
+}
+
+TEST_CASE("Scene falls back to int index when no path known", "[Scene]") {
+  Scene scene;
+  GameObject &a = scene.create("a");
+  a.renderer = ModelRenderer{ModelHandle{4}};
+
+  ser::Value value = scene.serializeWithModels(
+      [](ModelHandle) -> std::optional<std::string> { return std::nullopt; });
+  REQUIRE(value.asMap()
+              .at("objects")
+              .asArray()[0]
+              .asMap()
+              .at("renderer")
+              .asMap()
+              .at("model")
+              .asInt() == 4);
+
+  // Legacy int payloads load without a resolver.
+  Scene restored;
+  restored.deserializeWithModels(
+      value, [](const std::string &) -> std::optional<ModelHandle> {
+        return std::nullopt;
+      });
+  REQUIRE(restored.findByName("a")->renderer->model.index == 4);
+}
+
+TEST_CASE("Scene skips renderer when model path cannot be resolved",
+          "[Scene]") {
+  Scene scene;
+  GameObject &a = scene.create("a");
+  a.renderer = ModelRenderer{ModelHandle{1}};
+
+  ser::Value value = scene.serializeWithModels(
+      [](ModelHandle) -> std::optional<std::string> {
+        return std::string("models/Missing.glb");
+      });
+
+  Scene restored;
+  restored.deserializeWithModels(
+      value, [](const std::string &) -> std::optional<ModelHandle> {
+        return std::nullopt;
+      });
+  REQUIRE_FALSE(restored.findByName("a")->renderer.has_value());
+}
+
+TEST_CASE("Scene accepts concise objects with missing keys", "[Scene]") {
+  ser::Value value = ser::Value::Map{
+      {"objects",
+       ser::Value::Array{
+           ser::Value::Map{{"name", "bare"}},
+           ser::Value::Map{
+               {"name", "cam"},
+               {"camera", ser::Value::Map{}},
+               {"transform",
+                ser::Value::Map{
+                    {"position", ser::Value::Array{0.0f, 1.0f, 2.0f}}}},
+           },
+       }},
+      {"mainCamera", "cam"},
+  };
+
+  Scene restored;
+  restored.deserializeWithModels(
+      value, [](const std::string &) -> std::optional<ModelHandle> {
+        return std::nullopt;
+      });
+
+  REQUIRE(restored.objects().size() == 2);
+  const GameObject *bare = restored.findByName("bare");
+  REQUIRE(bare != nullptr);
+  requireVec3Near(bare->transform.position, {0.0f, 0.0f, 0.0f});
+  requireQuatNear(bare->transform.rotation, Quat::IDENTITY);
+  REQUIRE_FALSE(bare->renderer.has_value());
+
+  const GameObject *cam = restored.findByName("cam");
+  REQUIRE(cam != nullptr);
+  REQUIRE(cam->camera.has_value());
+  requireVec3Near(cam->transform.position, {0.0f, 1.0f, 2.0f});
+  REQUIRE(restored.mainCamera() == cam);
+}

@@ -28,6 +28,12 @@ public:
   Value(Map value) : m_value(std::move(value)) {}
 
   bool isNull() const { return std::get_if<Null>(&m_value) != nullptr; }
+  bool isBool() const { return std::get_if<Bool>(&m_value) != nullptr; }
+  bool isInt() const { return std::get_if<Int>(&m_value) != nullptr; }
+  bool isReal() const { return std::get_if<Real>(&m_value) != nullptr; }
+  bool isString() const { return std::get_if<String>(&m_value) != nullptr; }
+  bool isArray() const { return std::get_if<Array>(&m_value) != nullptr; }
+  bool isMap() const { return std::get_if<Map>(&m_value) != nullptr; }
 
   const Bool &asBool() const { return std::get<Bool>(m_value); }
   Int asInt() const {

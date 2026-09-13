@@ -4,10 +4,20 @@
 #include "src/serialize/serialize.hpp"
 
 #include <deque>
+#include <functional>
+#include <optional>
+#include <string>
 #include <string_view>
 
 class Scene : public ser::Serializable, public ser::Deserialazable {
 public:
+  using ModelPathForHandle =
+      std::function<std::optional<std::string>(ModelHandle)>;
+  using ModelHandleForPath =
+      std::function<std::optional<ModelHandle>(const std::string &)>;
+
+  static constexpr const char *BUILTIN_GIZMO = "builtin:gizmo";
+
   GameObject &create(std::string name);
 
   GameObject *find(uint32_t id);
@@ -25,6 +35,10 @@ public:
 
   ser::Value serialize() const override;
   void deserialize(ser::Value value) override;
+
+  ser::Value serializeWithModels(const ModelPathForHandle &pathFor) const;
+  void deserializeWithModels(const ser::Value &value,
+                             const ModelHandleForPath &handleFor);
 
 private:
   std::deque<GameObject> m_objects;

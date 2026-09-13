@@ -1,12 +1,10 @@
 #include "engine.hpp"
 
-#include "src/asset/handles.hpp"
-#include "src/asset/model/load.hpp"
 #include "src/asset/store.hpp"
 #include "src/consts.hpp"
 #include "src/core/control_layer.hpp"
 #include "src/core/debug_layer.hpp"
-#include "src/scene/game_object.hpp"
+#include "src/scene/io.hpp"
 #include "src/scene/scene.hpp"
 #include "src/script/layer.hpp"
 
@@ -37,7 +35,7 @@ Engine::Engine(std::vector<std::string> args) {
   m_assets = std::make_unique<AssetStore>(m_renderer->getDevice());
   m_scene = std::make_unique<Scene>();
 
-  buildScene();
+  loadSceneFromFile(*m_scene, *m_assets, "scene.json");
   FrameScene frame =
       gatherFrameScene(*m_scene, *m_assets, m_frameObjects, m_frameLights);
   m_renderer->initScene(*m_assets, frame);
@@ -56,53 +54,6 @@ Engine::Engine(std::vector<std::string> args) {
                           std::make_unique<DebugLayer>(*m_window, *m_renderer,
                                                        *m_assets, *m_scene));
   }
-}
-
-void Engine::buildScene() {
-  ModelHandle box = loadModel(*m_assets, "models/Box6.glb");
-
-  GameObject &prop = m_scene->create("Box6");
-  prop.renderer = ModelRenderer{box};
-
-  GameObject &prop2 = m_scene->create("Box6_2");
-  prop2.renderer = ModelRenderer{box};
-  prop2.transform.position = Vec3{4.0f, 0.0f, 1.0f};
-
-  ModelHandle box2 = loadModel(*m_assets, "models/Box2_2.glb");
-  GameObject &prop3 = m_scene->create("Box2");
-  prop3.renderer = ModelRenderer{box2};
-  prop3.transform.position = Vec3{1.0f, 0.0f, 5.0f};
-
-  ModelHandle box3 = loadModel(*m_assets, "models/MetalCube.glb");
-  GameObject &prop4 = m_scene->create("Box3");
-  prop4.renderer = ModelRenderer{box3};
-  prop4.transform.position = Vec3{2.0f, 2.0f, -2.0f};
-
-  ModelHandle car = loadModel(*m_assets, "models/Car3.glb");
-  GameObject &carProp = m_scene->create("Car");
-  carProp.renderer = ModelRenderer{car};
-  carProp.transform.position = Vec3{2.0f, 3.5f, -2.0f};
-
-  ModelHandle floor = loadModel(*m_assets, "models/Floor.glb");
-  GameObject &floorProp = m_scene->create("Car");
-  floorProp.renderer = ModelRenderer{floor};
-  floorProp.transform.position = Vec3{0.0f, -2.5f, 0.0f};
-
-  GameObject &camera = m_scene->create("Main Camera");
-  camera.camera = CameraParams{};
-  m_scene->setMainCamera(camera.id);
-  camera.transform.position = Vec3{0.0f, 1.0f, 1.0f};
-  camera.transform.rotation = Quat::fromEuler(Vec3{-LDG_PI / 4.0f, 0.0f, 0.0f});
-
-  GameObject &light = m_scene->create("Light");
-  light.light = LightParams{};
-  light.transform.position = Vec3{4.0f, 4.0f, 4.0f};
-  light.transform.scale = Vec3{0.2f, 0.2f, 0.2f};
-
-  GameObject &light2 = m_scene->create("Light2");
-  light2.light = LightParams{};
-  light2.transform.position = Vec3{-4.0f, 2.0f, 6.0f};
-  light2.transform.scale = Vec3{0.2f, 0.2f, 0.2f};
 }
 
 void Engine::run() {

@@ -67,6 +67,7 @@ void AssetStore::createBuiltins() {
           .local = Mat4::IDENTITY,
       }},
   });
+  m_modelSources.push_back(std::nullopt);
 }
 
 MeshHandle AssetStore::createMesh(const void *vertices, size_t vertexBytes,
@@ -114,7 +115,25 @@ TextureHandle AssetStore::addTexture(Texture texture) {
 
 ModelHandle AssetStore::addModel(Model model) {
   m_models.push_back(std::move(model));
+  m_modelSources.push_back(std::nullopt);
   return ModelHandle{static_cast<uint32_t>(m_models.size() - 1)};
+}
+
+std::string AssetStore::normalizeModelKey(const std::filesystem::path &path) {
+  return path.lexically_normal().generic_string();
+}
+
+void AssetStore::setModelPath(ModelHandle handle, std::string path) {
+  if (handle.index >= m_models.size() || handle.index >= m_modelSources.size())
+    return;
+  m_modelSources[handle.index] = path;
+  m_modelByPath[normalizeModelKey(path)] = handle;
+}
+
+std::optional<std::string> AssetStore::pathOf(ModelHandle handle) const {
+  if (handle.index >= m_modelSources.size())
+    return std::nullopt;
+  return m_modelSources[handle.index];
 }
 
 const GpuMesh &AssetStore::mesh(MeshHandle handle) const {

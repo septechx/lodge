@@ -7,6 +7,10 @@
 #include "src/render/device.hpp"
 #include "src/scene/material.hpp"
 
+#include <filesystem>
+#include <optional>
+#include <string>
+#include <unordered_map>
 #include <vector>
 
 struct GpuMesh {
@@ -42,6 +46,11 @@ public:
   TextureHandle addTexture(Texture texture);
   ModelHandle addModel(Model model);
 
+  ModelHandle loadModelCached(const std::filesystem::path &path);
+  void setModelPath(ModelHandle handle, std::string path);
+  std::optional<std::string> pathOf(ModelHandle handle) const;
+  static std::string normalizeModelKey(const std::filesystem::path &path);
+
   TextureHandle whiteTexture() const { return TextureHandle{0}; }
   TextureHandle yellowTexture() const { return TextureHandle{1}; }
   TextureHandle flatNormalTexture() const { return TextureHandle{2}; }
@@ -61,4 +70,6 @@ private:
   std::vector<GpuMesh> m_meshes;
   std::vector<Texture> m_textures;
   std::vector<Model> m_models;
+  std::vector<std::optional<std::string>> m_modelSources;
+  std::unordered_map<std::string, ModelHandle> m_modelByPath;
 };

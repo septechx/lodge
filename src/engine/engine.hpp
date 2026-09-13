@@ -30,8 +30,6 @@ public:
   void run();
 
 private:
-  void buildScene();
-
   std::unique_ptr<GLFWwindow, GLFWWindowDeleter> m_window;
   std::unique_ptr<Renderer> m_renderer;
   std::unique_ptr<AssetStore> m_assets;

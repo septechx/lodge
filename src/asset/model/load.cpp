@@ -492,6 +492,15 @@ static std::vector<ModelPart> buildParts(AssetStore &store,
   return parts;
 }
 
+ModelHandle AssetStore::loadModelCached(const std::filesystem::path &path) {
+  const std::string key = normalizeModelKey(path);
+  auto it = m_modelByPath.find(key);
+  if (it != m_modelByPath.end() && it->second.index < m_models.size())
+    return it->second;
+  return loadModel(*this, path);
+}
+
+// TODO: Make into method of AssetStore
 ModelHandle loadModel(AssetStore &store, std::filesystem::path path) {
   tinygltf3::ErrorStack errors;
   tinygltf3::Model model;
@@ -516,5 +525,7 @@ ModelHandle loadModel(AssetStore &store, std::filesystem::path path) {
   spdlog::debug("built model with {} parts and {} textures from glTF",
                 parts.size(), model->textures_count);
 
-  return store.addModel(Model{std::move(parts)});
+  ModelHandle handle = store.addModel(Model{std::move(parts)});
+  store.setModelPath(handle, AssetStore::normalizeModelKey(path));
+  return handle;
 }

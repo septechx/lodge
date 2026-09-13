@@ -78,7 +78,11 @@ static Value valueFor(const tg3json_value &tg3jsonValue) {
 }
 
 std::string toJson(const Serializable &value) {
-  tg3json_value tg3jsonValue = tg3jsonValueFor(value.serialize());
+  return toJson(value.serialize());
+}
+
+std::string toJson(const Value &value) {
+  tg3json_value tg3jsonValue = tg3jsonValueFor(value);
 
   size_t size;
   char *result = tg3json_stringify_pretty(&tg3jsonValue, 2, &size);
@@ -93,20 +97,29 @@ std::string toJson(const Serializable &value) {
   return out;
 }
 
-void fromJson(Deserialazable &out, const std::string &json) {
+std::expected<int, JsonError> fromJson(Deserialazable &out,
+                                       const std::string &json) {
+  auto value = parseJson(json);
+  if (!value.has_value()) {
+    return std::unexpected(JsonError::Error);
+  }
+  out.deserialize(std::move(*value));
+
+  return 0;
+}
+
+std::expected<Value, JsonError> parseJson(const std::string &json) {
   tg3json_value tg3jsonValue;
   const char *errorPos = nullptr;
   int ok = tg3json_parse(json.data(), json.data() + json.size(), 4096,
                          &tg3jsonValue, &errorPos);
   if (!ok) {
-    spdlog::error("invalid JSON");
-    exit(1);
+    return std::unexpected(JsonError::Error);
   }
 
   Value value = valueFor(tg3jsonValue);
   tg3json_value_free(&tg3jsonValue);
-
-  out.deserialize(std::move(value));
+  return value;
 }
 
 }; // namespace ser
