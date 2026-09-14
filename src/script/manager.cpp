@@ -1,76 +1,77 @@
 #include "manager.hpp"
 
+#include "src/script/scene_api.hpp"
+
 #include <lua.hpp>
 #include <spdlog/spdlog.h>
 
 #include <string>
 
-static Scene *getScene(lua_State *lua) {
-  return static_cast<Scene *>(lua_touserdata(lua, lua_upvalueindex(1)));
-}
-
-static int l_findByName(lua_State *lua) {
-  Scene *scene = getScene(lua);
-  const char *name = luaL_checkstring(lua, 1);
-  if (GameObject *object = scene->findByName(name)) {
-    lua_pushinteger(lua, object->id);
-  } else {
-    lua_pushnil(lua);
-  }
-  return 1;
-}
-
-static int l_getPosition(lua_State *lua) {
-  Scene *scene = getScene(lua);
-  GameObject *object = scene->find(luaL_checkinteger(lua, 1));
-  if (!object) {
-    lua_pushnil(lua);
-    return 1;
-  }
-  lua_pushnumber(lua, object->transform.position.x);
-  lua_pushnumber(lua, object->transform.position.y);
-  lua_pushnumber(lua, object->transform.position.z);
-  return 3;
-}
-
-static int l_setPosition(lua_State *lua) {
-  Scene *scene = getScene(lua);
-  GameObject *object =
-      scene->find(static_cast<uint32_t>(luaL_checkinteger(lua, 1)));
-  if (!object) {
-    return luaL_error(lua, "invalid object id");
-  }
-  object->transform.position = {static_cast<float>(luaL_checknumber(lua, 2)),
-                                static_cast<float>(luaL_checknumber(lua, 3)),
-                                static_cast<float>(luaL_checknumber(lua, 4))};
+static int l_logInfo(lua_State *lua) {
+  spdlog::info("{}", luaL_checkstring(lua, 1));
   return 0;
+}
+
+static int l_logWarn(lua_State *lua) {
+  spdlog::warn("{}", luaL_checkstring(lua, 1));
+  return 0;
+}
+
+int l_logError(lua_State *lua) {
+  spdlog::error("{}", luaL_checkstring(lua, 1));
+  return 0;
+}
+
+static void registerLogApi(lua_State *lua) {
+  lua_newtable(lua);
+  lua_pushcfunction(lua, l_logInfo);
+  lua_setfield(lua, -2, "info");
+  lua_pushcfunction(lua, l_logWarn);
+  lua_setfield(lua, -2, "warn");
+  lua_pushcfunction(lua, l_logError);
+  lua_setfield(lua, -2, "error");
+  lua_setglobal(lua, "log");
+}
+
+static void pushSandboxEnv(lua_State *lua) {
+  lua_newtable(lua);
+  lua_newtable(lua);
+  lua_pushvalue(lua, LUA_GLOBALSINDEX);
+  lua_setfield(lua, -2, "__index");
+  lua_setmetatable(lua, -2);
+}
+
+static int refEnvField(lua_State *lua, int envRef, const char *name) {
+  lua_rawgeti(lua, LUA_REGISTRYINDEX, envRef);
+  lua_getfield(lua, -1, name);
+  int ref = LUA_NOREF;
+  if (lua_isfunction(lua, -1)) {
+    ref = luaL_ref(lua, LUA_REGISTRYINDEX);
+  } else {
+    lua_pop(lua, 1);
+  }
+  lua_pop(lua, 1);
+  return ref;
 }
 
 ScriptManager::ScriptManager(Scene &scene) : m_scene(scene) {
   m_lua = luaL_newstate();
   luaL_openlibs(m_lua);
 
-  lua_newtable(m_lua);
-
-  lua_pushlightuserdata(m_lua, &m_scene);
-  lua_pushcclosure(m_lua, l_findByName, 1);
-  lua_setfield(m_lua, -2, "findByName");
-
-  lua_pushlightuserdata(m_lua, &m_scene);
-  lua_pushcclosure(m_lua, l_getPosition, 1);
-  lua_setfield(m_lua, -2, "getPosition");
-
-  lua_pushlightuserdata(m_lua, &m_scene);
-  lua_pushcclosure(m_lua, l_setPosition, 1);
-  lua_setfield(m_lua, -2, "setPosition");
-
-  lua_setglobal(m_lua, "scene");
+  registerSceneApi(m_lua, m_scene);
+  registerLogApi(m_lua);
 }
 
 ScriptManager::~ScriptManager() {
   for (Script &script : m_scripts) {
+    if (script.startRef != LUA_NOREF) {
+      luaL_unref(m_lua, LUA_REGISTRYINDEX, script.startRef);
+    }
     if (script.updateRef != LUA_NOREF) {
       luaL_unref(m_lua, LUA_REGISTRYINDEX, script.updateRef);
+    }
+    if (script.envRef != LUA_NOREF) {
+      luaL_unref(m_lua, LUA_REGISTRYINDEX, script.envRef);
     }
   }
 
@@ -78,20 +79,32 @@ ScriptManager::~ScriptManager() {
 }
 
 void ScriptManager::loadScript(std::filesystem::path path) {
-  if (luaL_dofile(m_lua, path.c_str()) != LUA_OK) {
+  if (luaL_loadfile(m_lua, path.c_str()) != LUA_OK) {
     throwError(path);
+    return;
   }
 
-  lua_getglobal(m_lua, "Update");
+  pushSandboxEnv(m_lua);
+  lua_pushvalue(m_lua, -1);
+  int envRef = luaL_ref(m_lua, LUA_REGISTRYINDEX);
+  lua_setfenv(m_lua, -2);
 
-  if (!lua_isfunction(m_lua, -1)) {
-    lua_pop(m_lua, 1);
-    spdlog::error("Script {} does not define update()");
+  if (lua_pcall(m_lua, 0, 0, 0) != LUA_OK) {
+    luaL_unref(m_lua, LUA_REGISTRYINDEX, envRef);
+    throwError(path);
+    return;
   }
 
-  int updateRef = luaL_ref(m_lua, LUA_REGISTRYINDEX);
+  int startRef = refEnvField(m_lua, envRef, "Start");
+  int updateRef = refEnvField(m_lua, envRef, "Update");
+  m_scripts.push_back({path, envRef, startRef, updateRef});
 
-  m_scripts.push_back({path, updateRef});
+  if (startRef != LUA_NOREF) {
+    lua_rawgeti(m_lua, LUA_REGISTRYINDEX, startRef);
+    if (lua_pcall(m_lua, 0, 0, 0) != LUA_OK) {
+      throwError(path);
+    }
+  }
 }
 
 void ScriptManager::updateScripts(float dt) {

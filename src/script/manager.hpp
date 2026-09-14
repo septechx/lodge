@@ -9,6 +9,8 @@
 
 struct Script {
   std::filesystem::path path;
+  int envRef = LUA_NOREF;
+  int startRef = LUA_NOREF;
   int updateRef = LUA_NOREF;
 };
 

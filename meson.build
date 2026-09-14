@@ -85,6 +85,7 @@ executable(
   'src/render/pipelines/ssr.cpp',
   'src/debug/renderdoc.cpp',
   'src/script/manager.cpp',
+  'src/script/scene_api.cpp',
   'src/script/layer.cpp',
   'src/serialize/json.cpp',
   deps_sources,
@@ -136,4 +137,15 @@ if catch2_dep.found()
     include_directories: include_directories('src', '.'),
   )
   test('pipeline', test_pipeline)
+
+  test_script = executable(
+    'test_script',
+    'tests/test_script.cpp',
+    'src/script/scene_api.cpp',
+    'src/script/manager.cpp',
+    'src/scene/scene.cpp',
+    dependencies: [catch2_dep, dependency('luajit'), dependency('spdlog')],
+    include_directories: include_directories('src'),
+  )
+  test('script', test_script)
 endif
