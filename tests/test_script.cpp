@@ -110,16 +110,25 @@ std::filesystem::path writeTempScript(const std::string &name,
 }
 
 } // namespace
-
 TEST_CASE("Scene API lookup", "[Script]") {
   LuaScene fix;
   GameObject &a = fix.scene.create("a");
   fix.scene.create("b");
 
-  std::string findA = "scene.findByName('a')";
-  REQUIRE(evalInt(fix.lua, findA) == static_cast<int>(a.id));
+  // findByName now returns a GameObject handle (userdata), not a raw integer.
+  REQUIRE(evalInt(fix.lua, "scene.findByName('a'):getId()") ==
+          static_cast<int>(a.id));
+  REQUIRE(evalInt(fix.lua, "scene.findByName('a').id") ==
+          static_cast<int>(a.id));
   REQUIRE(evalNil(fix.lua, "scene.findByName('missing')"));
 
+  // Handles work wherever an id was previously accepted.
+  REQUIRE(evalBool(fix.lua, "scene.isValid(scene.findByName('a'))"));
+  eval(fix.lua, "scene.getName(scene.findByName('a'))");
+  REQUIRE(std::string(lua_tostring(fix.lua, -1)) == "a");
+  lua_settop(fix.lua, 0);
+
+  // Raw integer ids keep working for backwards compatibility.
   REQUIRE(evalBool(fix.lua, "scene.isValid(" + std::to_string(a.id) + ")"));
   REQUIRE_FALSE(evalBool(fix.lua, "scene.isValid(9999)"));
   REQUIRE_FALSE(evalBool(fix.lua, "scene.isValid(nil)"));
@@ -292,7 +301,10 @@ TEST_CASE("Scene API main camera", "[Script]") {
 
   requireOk(fix.lua, "scene.setMainCamera(scene.findByName('cam'))");
   REQUIRE(fix.scene.mainCamera() == &cam);
-  REQUIRE(evalInt(fix.lua, "scene.mainCamera()") == static_cast<int>(cam.id));
+  REQUIRE(evalInt(fix.lua, "scene.mainCamera():getId()") ==
+          static_cast<int>(cam.id));
+  REQUIRE(evalInt(fix.lua, "scene.mainCamera().id") ==
+          static_cast<int>(cam.id));
 
   requireErr(fix.lua, "scene.setMainCamera(scene.findByName('plain'))");
   requireErr(fix.lua, "scene.setMainCamera(9999)");
@@ -366,4 +378,147 @@ TEST_CASE("ScriptManager tolerates broken scripts", "[Script]") {
   scripts.updateScripts(0.016f);
 
   requireVec3Near(box.transform.position, {3.0f, 0.0f, 0.0f});
+}
+
+TEST_CASE("GameObject method syntax (test.lua style)", "[Script]") {
+  LuaScene fix;
+  GameObject &car = fix.scene.create("Car");
+  car.transform.position = {2.0f, 3.5f, -2.0f};
+
+  // Same calls as test.lua: find + if car + car:translate + car:rotateAxisAngle
+  requireOk(fix.lua, "car = scene.findByName('Car');"
+                     "assert(car, 'Car should exist');"
+                     "car:translate({x = 0.0, y = 0.0, z = 1.0})");
+  requireVec3Near(car.transform.position, {2.0f, 3.5f, -1.0f});
+
+  requireOk(fix.lua,
+            "car:rotateAxisAngle({x = 0.0, y = 0.0, z = 1.0}, math.rad(45.0))");
+  Quat expected =
+      Quat::fromAxisAngle({0.0f, 0.0f, 1.0f}, static_cast<float>(M_PI) / 4.0f);
+  REQUIRE(car.transform.rotation.w == Catch::Approx(expected.w).margin(1e-5f));
+  REQUIRE(car.transform.rotation.x == Catch::Approx(expected.x).margin(1e-5f));
+  REQUIRE(car.transform.rotation.y == Catch::Approx(expected.y).margin(1e-5f));
+  REQUIRE(car.transform.rotation.z == Catch::Approx(expected.z).margin(1e-5f));
+
+  // Missing objects stay nil/falsy so `if car then` guards work.
+  REQUIRE(evalNil(fix.lua, "scene.findByName('Missing')"));
+  REQUIRE_FALSE(evalBool(fix.lua, "scene.findByName('Missing') ~= nil"));
+  REQUIRE(evalBool(fix.lua, "scene.findByName('Car') ~= nil"));
+  requireOk(fix.lua, "if scene.findByName('Missing') then error('should be "
+                     "falsy') end");
+  requireOk(fix.lua,
+            "if not scene.findByName('Car') then error('should be truthy') "
+            "end");
+
+  // Degenerate axis still errors via method syntax.
+  requireErr(fix.lua, "scene.findByName('Car'):rotateAxisAngle({x = 0, y = 0, "
+                      "z = 0}, 1.0)");
+}
+
+TEST_CASE("GameObject methods mirror scene API", "[Script]") {
+  LuaScene fix;
+  GameObject &box = fix.scene.create("Box");
+  GameObject &cam = fix.scene.create("cam");
+  cam.camera = CameraParams{.fovY = 60.0f, .nearZ = 0.5f, .farZ = 100.0f};
+  GameObject &lamp = fix.scene.create("lamp");
+  lamp.light = LightParams{.color = {0.1f, 0.5f, 0.9f}};
+
+  // Transform getters/setters.
+  requireOk(fix.lua, "scene.findByName('Box'):setPosition({x = 4, y = 5, z = "
+                     "6})");
+  requireVec3Near(box.transform.position, {4.0f, 5.0f, 6.0f});
+  requireVec3Near(evalVec3(fix.lua, "scene.findByName('Box'):getPosition()"),
+                  {4.0f, 5.0f, 6.0f});
+
+  requireOk(fix.lua, "scene.findByName('Box'):setScale({x = 2, y = 3, z = 4})");
+  requireVec3Near(box.transform.scale, {2.0f, 3.0f, 4.0f});
+  requireVec3Near(evalVec3(fix.lua, "scene.findByName('Box'):getScale()"),
+                  {2.0f, 3.0f, 4.0f});
+
+  requireOk(fix.lua, "scene.findByName('Box'):setRotation({w = 2, x = 0, y = "
+                     "0, z = 0})");
+  REQUIRE(box.transform.rotation.w == Catch::Approx(1.0f).margin(1e-6f));
+  requireErr(fix.lua, "scene.findByName('Box'):setRotation({w = 0, x = 0, y = "
+                      "0, z = 0})");
+
+  requireOk(fix.lua, "scene.findByName('Box'):setRotationEuler({x = 0, y = 0, "
+                     "z = 0})");
+  REQUIRE(box.transform.rotation.w == Catch::Approx(1.0f).margin(1e-6f));
+
+  // Name / validity / components.
+  eval(fix.lua, "scene.findByName('Box'):getName()");
+  REQUIRE(std::string(lua_tostring(fix.lua, -1)) == "Box");
+  lua_settop(fix.lua, 0);
+  REQUIRE(evalBool(fix.lua, "scene.findByName('Box'):isValid()"));
+  REQUIRE(evalBool(fix.lua, "scene.findByName('Box'):hasRenderer()") == false);
+  box.renderer = ModelRenderer{ModelHandle{0}};
+  REQUIRE(evalBool(fix.lua, "scene.findByName('Box'):hasRenderer()"));
+  REQUIRE(evalBool(fix.lua, "scene.findByName('cam'):hasCamera()"));
+  REQUIRE_FALSE(evalBool(fix.lua, "scene.findByName('Box'):hasCamera()"));
+  REQUIRE(evalBool(fix.lua, "scene.findByName('lamp'):hasLight()"));
+
+  // Camera / light through methods.
+  eval(fix.lua, "scene.findByName('cam'):getCamera()");
+  REQUIRE(tableField(fix.lua, "fovY") == Catch::Approx(60.0f).margin(1e-6f));
+  lua_settop(fix.lua, 0);
+  requireOk(fix.lua, "scene.findByName('cam'):setCamera({fovY = 45, nearZ = "
+                     "0.1, farZ = 50})");
+  REQUIRE(cam.camera->fovY == Catch::Approx(45.0f).margin(1e-6f));
+  requireErr(fix.lua, "scene.findByName('Box'):setCamera({fovY = 45, nearZ = "
+                      "0.1, farZ = 50})");
+
+  eval(fix.lua, "scene.findByName('lamp'):getLightColor()");
+  REQUIRE(tableField(fix.lua, "r") == Catch::Approx(0.1f).margin(1e-6f));
+  lua_settop(fix.lua, 0);
+  requireOk(fix.lua, "scene.findByName('lamp'):setLightColor({r = 1, g = 0.8, "
+                     "b = 0.6})");
+  requireVec3Near(lamp.light->color, {1.0f, 0.8f, 0.6f});
+
+  // setMainCamera as a method with no extra args.
+  requireOk(fix.lua, "scene.findByName('cam'):setMainCamera()");
+  REQUIRE(fix.scene.mainCamera() == &cam);
+  requireErr(fix.lua, "scene.findByName('Box'):setMainCamera()");
+
+  // Handles support ==, tostring, .id and are read-only.
+  REQUIRE(evalBool(fix.lua, "scene.findByName('Box') == "
+                            "scene.findByName('Box')"));
+  REQUIRE_FALSE(evalBool(fix.lua, "scene.findByName('Box') == "
+                                  "scene.findByName('cam')"));
+  eval(fix.lua, "tostring(scene.findByName('Box'))");
+  REQUIRE(std::string(lua_tostring(fix.lua, -1)).find("Box") !=
+          std::string::npos);
+  lua_settop(fix.lua, 0);
+  requireErr(fix.lua, "scene.findByName('Box').id = 5");
+  requireErr(fix.lua, "scene.findByName('Box').foo = 1");
+
+  // findAll returns handles and mainCamera returns a handle.
+  REQUIRE(evalInt(fix.lua, "#scene.findAll()") == 3);
+  REQUIRE(evalInt(fix.lua, "scene.findAll()[1]:getId()") >= 1);
+  REQUIRE(evalBool(fix.lua, "scene.mainCamera():hasCamera()"));
+}
+
+TEST_CASE("ScriptManager runs method-style Update", "[Script]") {
+  Scene scene;
+  GameObject &car = scene.create("Car");
+  car.transform.position = {0.0f, 0.0f, 0.0f};
+
+  std::filesystem::path path = writeTempScript(
+      "lodge_test_method_update.lua",
+      "function Update(dt)\n"
+      "  local c = scene.findByName('Car')\n"
+      "  if c then\n"
+      "    c:translate({x = 0, y = 0, z = dt * 1.0})\n"
+      "    c:rotateAxisAngle({x = 0, y = 0, z = 1.0}, math.rad(dt * 45.0))\n"
+      "  end\n"
+      "end\n");
+
+  ScriptManager scripts(scene);
+  scripts.loadScript(path);
+  scripts.updateScripts(1.0f);
+
+  requireVec3Near(car.transform.position, {0.0f, 0.0f, 1.0f});
+  Quat expected =
+      Quat::fromAxisAngle({0.0f, 0.0f, 1.0f}, static_cast<float>(M_PI) / 4.0f);
+  REQUIRE(car.transform.rotation.w == Catch::Approx(expected.w).margin(1e-5f));
+  REQUIRE(car.transform.rotation.z == Catch::Approx(expected.z).margin(1e-5f));
 }
