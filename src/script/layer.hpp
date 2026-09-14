@@ -5,7 +5,7 @@
 
 class ScriptLayer final : public Layer {
 public:
-  ScriptLayer() = default;
+  ScriptLayer(Scene &scene);
   ~ScriptLayer() = default;
 
   void onAttach() override;

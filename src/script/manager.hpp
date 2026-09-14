@@ -1,8 +1,10 @@
 #pragma once
 
-#include <filesystem>
+#include "src/scene/scene.hpp"
+
 #include <lua.hpp>
 
+#include <filesystem>
 #include <vector>
 
 struct Script {
@@ -12,7 +14,7 @@ struct Script {
 
 class ScriptManager {
 public:
-  ScriptManager();
+  ScriptManager(Scene &scene);
   ~ScriptManager();
 
   void loadScript(std::filesystem::path path);
@@ -21,6 +23,7 @@ public:
 private:
   lua_State *m_lua;
   std::vector<Script> m_scripts;
+  Scene &m_scene;
 
   void throwError(const std::filesystem::path &path);
 };
