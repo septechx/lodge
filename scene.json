@@ -41,7 +41,8 @@
       },
       "renderer": {
         "model": "models/Car3.glb"
-      }
+      },
+      "scripts": ["test.lua"]
     },
     {
       "name": "Floor",

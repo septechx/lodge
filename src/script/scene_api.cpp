@@ -7,14 +7,23 @@
 #include <cstring>
 #include <string>
 
-namespace {
-
 constexpr const char *GAMEOBJECT_MT = "Lodge.GameObject";
 
 struct ObjectHandle {
   Scene *scene = nullptr;
   uint32_t id = 0;
 };
+
+void pushGameObject(lua_State *lua, Scene *scene, uint32_t id) {
+  ObjectHandle *handle =
+      static_cast<ObjectHandle *>(lua_newuserdata(lua, sizeof(ObjectHandle)));
+  handle->scene = scene;
+  handle->id = id;
+  luaL_getmetatable(lua, GAMEOBJECT_MT);
+  lua_setmetatable(lua, -2);
+}
+
+namespace {
 
 Scene *getScene(lua_State *lua) {
   return static_cast<Scene *>(lua_touserdata(lua, lua_upvalueindex(1)));
@@ -39,15 +48,6 @@ bool isGameObject(lua_State *lua, int idx) {
 
 ObjectHandle *checkHandle(lua_State *lua, int idx) {
   return static_cast<ObjectHandle *>(luaL_checkudata(lua, idx, GAMEOBJECT_MT));
-}
-
-void pushObject(lua_State *lua, Scene *scene, uint32_t id) {
-  ObjectHandle *handle =
-      static_cast<ObjectHandle *>(lua_newuserdata(lua, sizeof(ObjectHandle)));
-  handle->scene = scene;
-  handle->id = id;
-  luaL_getmetatable(lua, GAMEOBJECT_MT);
-  lua_setmetatable(lua, -2);
 }
 
 uint32_t handleId(lua_State *lua, int idx) {
@@ -147,7 +147,7 @@ int l_findByName(lua_State *lua) {
   Scene *scene = getScene(lua);
   const char *name = luaL_checkstring(lua, 1);
   if (GameObject *object = scene->findByName(name)) {
-    pushObject(lua, scene, object->id);
+    pushGameObject(lua, scene, object->id);
   } else {
     lua_pushnil(lua);
   }
@@ -175,7 +175,7 @@ int l_findAll(lua_State *lua) {
   lua_newtable(lua);
   int i = 1;
   for (const GameObject &object : scene->objects()) {
-    pushObject(lua, scene, object.id);
+    pushGameObject(lua, scene, object.id);
     lua_rawseti(lua, -2, i++);
   }
   return 1;
@@ -184,7 +184,7 @@ int l_findAll(lua_State *lua) {
 int l_mainCamera(lua_State *lua) {
   Scene *scene = getScene(lua);
   if (GameObject *camera = scene->mainCamera()) {
-    pushObject(lua, scene, camera->id);
+    pushGameObject(lua, scene, camera->id);
   } else {
     lua_pushnil(lua);
   }

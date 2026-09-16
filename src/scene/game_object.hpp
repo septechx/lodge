@@ -7,6 +7,7 @@
 
 #include <optional>
 #include <string>
+#include <vector>
 
 struct CameraParams {
   float fovY = FOV_Y_DEGREES;
@@ -22,6 +23,10 @@ struct ModelRenderer {
   ModelHandle model;
 };
 
+struct ScriptRef {
+  std::string path;
+};
+
 struct GameObject {
   uint32_t id = 0;
   std::string name;
@@ -31,4 +36,5 @@ struct GameObject {
   std::optional<ModelRenderer> renderer;
   std::optional<CameraParams> camera;
   std::optional<LightParams> light;
+  std::vector<ScriptRef> scripts;
 };

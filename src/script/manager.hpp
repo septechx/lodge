@@ -12,6 +12,7 @@ struct Script {
   int envRef = LUA_NOREF;
   int startRef = LUA_NOREF;
   int updateRef = LUA_NOREF;
+  uint32_t ownerId = 0;
 };
 
 class ScriptManager {
@@ -20,6 +21,12 @@ public:
   ~ScriptManager();
 
   void loadScript(std::filesystem::path path);
+  void loadObjectScript(uint32_t ownerId, std::filesystem::path path);
+  void loadSceneScripts();
+  void clear();
+
+  size_t scriptCount() const { return m_scripts.size(); }
+
   void updateScripts(float dt);
 
 private:
@@ -27,5 +34,6 @@ private:
   std::vector<Script> m_scripts;
   Scene &m_scene;
 
-  void throwError(const std::filesystem::path &path);
+  void loadScriptWithOwner(std::filesystem::path path, uint32_t ownerId);
+  void throwError(const std::filesystem::path &path, uint32_t ownerId = 0);
 };

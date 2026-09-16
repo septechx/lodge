@@ -79,6 +79,14 @@ ser::Value Scene::serializeWithModels(const ModelPathForHandle &pathFor) const {
                  static_cast<ser::Value::Int>(object.renderer->model.index)}};
           }
         }
+        ser::Value::Array scriptsValue{};
+        if (!object.scripts.empty()) {
+          scriptsValue.reserve(object.scripts.size());
+          for (const ScriptRef &script : object.scripts) {
+            scriptsValue.emplace_back(
+                ser::Value{ser::Value::String{script.path}});
+          }
+        }
         return ser::Value::Map{
             {"name", object.name},
             {"transform",
@@ -108,6 +116,7 @@ ser::Value Scene::serializeWithModels(const ModelPathForHandle &pathFor) const {
                                                    object.light->color.y,
                                                    object.light->color.z}}}}
                  : ser::Value{}},
+            {"scripts", object.scripts.empty() ? ser::Value{} : scriptsValue},
         };
       });
   ser::Value mainCameraValue;
@@ -222,6 +231,25 @@ void Scene::deserializeWithModels(const ser::Value &value,
       objectOut.light = params;
     } else {
       objectOut.light.reset();
+    }
+
+    auto scriptsIt = object.find("scripts");
+    if (scriptsIt != object.end() && !scriptsIt->second.isNull()) {
+      if (scriptsIt->second.isArray()) {
+        const auto &scriptRefs = scriptsIt->second.asArray();
+        objectOut.scripts.clear();
+        objectOut.scripts.reserve(scriptRefs.size());
+        for (const auto &ref : scriptRefs) {
+          if (ref.isString())
+            objectOut.scripts.push_back(ScriptRef{ref.asString()});
+        }
+      } else if (scriptsIt->second.isString()) {
+        objectOut.scripts = {ScriptRef{scriptsIt->second.asString()}};
+      } else {
+        objectOut.scripts = {};
+      }
+    } else {
+      objectOut.scripts = {};
     }
   }
 
