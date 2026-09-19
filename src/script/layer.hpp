@@ -10,6 +10,7 @@ public:
 
   void onAttach() override;
   void onUpdate(float dt) override;
+  bool onEvent(const Event &event) override;
 
 private:
   ScriptManager m_scripts;

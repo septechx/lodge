@@ -2,9 +2,13 @@
 #include <catch2/catch_test_macros.hpp>
 
 #include "scene/scene.hpp"
+#include "script/api/input.hpp"
+#include "script/api/input_state.hpp"
+#include "script/api/scene.hpp"
+#include "script/api/time.hpp"
 #include "script/manager.hpp"
-#include "script/scene_api.hpp"
 
+#include <GLFW/glfw3.h>
 #include <lua.hpp>
 
 #include <filesystem>
@@ -328,7 +332,7 @@ TEST_CASE("ScriptManager runs Start once and Update per frame", "[Script]") {
   scripts.loadScript(path);
   requireVec3Near(box.transform.position, {7.0f, 7.0f, 7.0f});
 
-  scripts.updateScripts(1.0f);
+  scripts.onUpdate(1.0f);
   requireVec3Near(box.transform.position, {7.0f, 7.0f, 8.0f});
 }
 
@@ -351,7 +355,7 @@ TEST_CASE("ScriptManager isolates scripts sharing Update", "[Script]") {
   ScriptManager scripts(scene);
   scripts.loadScript(pathA);
   scripts.loadScript(pathB);
-  scripts.updateScripts(0.016f);
+  scripts.onUpdate(0.016f);
 
   requireVec3Near(a.transform.position, {1.0f, 0.0f, 0.0f});
   requireVec3Near(b.transform.position, {2.0f, 0.0f, 0.0f});
@@ -375,7 +379,7 @@ TEST_CASE("ScriptManager tolerates broken scripts", "[Script]") {
   scripts.loadScript(good);
   scripts.loadScript(bad);
   scripts.loadScript(noUpdate);
-  scripts.updateScripts(0.016f);
+  scripts.onUpdate(0.016f);
 
   requireVec3Near(box.transform.position, {3.0f, 0.0f, 0.0f});
 }
@@ -514,11 +518,196 @@ TEST_CASE("ScriptManager runs method-style Update", "[Script]") {
 
   ScriptManager scripts(scene);
   scripts.loadScript(path);
-  scripts.updateScripts(1.0f);
+  scripts.onUpdate(1.0f);
 
   requireVec3Near(car.transform.position, {0.0f, 0.0f, 1.0f});
   Quat expected =
       Quat::fromAxisAngle({0.0f, 0.0f, 1.0f}, static_cast<float>(M_PI) / 4.0f);
   REQUIRE(car.transform.rotation.w == Catch::Approx(expected.w).margin(1e-5f));
   REQUIRE(car.transform.rotation.z == Catch::Approx(expected.z).margin(1e-5f));
+}
+
+TEST_CASE("InputState tracks keys and buttons", "[Script]") {
+  InputState input;
+  REQUIRE_FALSE(input.isKeyDown(GLFW_KEY_W));
+  REQUIRE_FALSE(input.isMouseDown(GLFW_MOUSE_BUTTON_LEFT));
+
+  input.onEvent(Event{events::KeyPressed{GLFW_KEY_W, 0}});
+  REQUIRE(input.isKeyDown(GLFW_KEY_W));
+  REQUIRE_FALSE(input.isKeyDown(GLFW_KEY_S));
+
+  input.onEvent(Event{events::KeyReleased{GLFW_KEY_W, 0}});
+  REQUIRE_FALSE(input.isKeyDown(GLFW_KEY_W));
+
+  input.onEvent(Event{events::MouseButtonPressed{GLFW_MOUSE_BUTTON_LEFT, 0}});
+  REQUIRE(input.isMouseDown(GLFW_MOUSE_BUTTON_LEFT));
+  input.onEvent(Event{events::MouseButtonReleased{GLFW_MOUSE_BUTTON_LEFT, 0}});
+  REQUIRE_FALSE(input.isMouseDown(GLFW_MOUSE_BUTTON_LEFT));
+
+  // Unrelated event types don't affect held state.
+  input.onEvent(Event{events::WindowResized{800, 600}});
+  REQUIRE_FALSE(input.isKeyDown(GLFW_KEY_W));
+}
+
+TEST_CASE("InputState resolves key and button names", "[Script]") {
+  REQUIRE(InputState::keyFromString("W") == GLFW_KEY_W);
+  REQUIRE(InputState::keyFromString("w") == GLFW_KEY_W);
+  REQUIRE(InputState::keyFromString("space") == GLFW_KEY_SPACE);
+  REQUIRE(InputState::keyFromString("Escape") == GLFW_KEY_ESCAPE);
+  REQUIRE(InputState::keyFromString("esc") == GLFW_KEY_ESCAPE);
+  REQUIRE(InputState::keyFromString("Up") == GLFW_KEY_UP);
+  REQUIRE(InputState::keyFromString("F1") == GLFW_KEY_F1);
+  REQUIRE(InputState::keyFromString("f12") == GLFW_KEY_F12);
+  REQUIRE(InputState::keyFromString("5") == GLFW_KEY_5);
+  REQUIRE_FALSE(InputState::keyFromString("NoSuchKey").has_value());
+  REQUIRE_FALSE(InputState::keyFromString("F99").has_value());
+
+  REQUIRE(InputState::buttonFromString("left") == GLFW_MOUSE_BUTTON_LEFT);
+  REQUIRE(InputState::buttonFromString("Right") == GLFW_MOUSE_BUTTON_RIGHT);
+  REQUIRE(InputState::buttonFromString("middle") == GLFW_MOUSE_BUTTON_MIDDLE);
+  REQUIRE_FALSE(InputState::buttonFromString("sideways").has_value());
+}
+
+TEST_CASE("InputState accumulates mouse and scroll per frame", "[Script]") {
+  InputState input;
+  REQUIRE_FALSE(input.hasMousePos());
+
+  input.onEvent(Event{events::MouseMoved{100.0, 200.0}});
+  REQUIRE(input.hasMousePos());
+  // First sighting establishes position without a delta spike.
+  REQUIRE(input.deltaX() == Catch::Approx(0.0));
+  REQUIRE(input.deltaY() == Catch::Approx(0.0));
+
+  input.onEvent(Event{events::MouseMoved{110.0, 190.0}});
+  REQUIRE(input.deltaX() == Catch::Approx(10.0));
+  REQUIRE(input.deltaY() == Catch::Approx(-10.0));
+
+  input.onEvent(Event{events::MouseScrolled{0.0, 2.0}});
+  input.onEvent(Event{events::MouseScrolled{1.0, -0.5}});
+  REQUIRE(input.scrollX() == Catch::Approx(1.0));
+  REQUIRE(input.scrollY() == Catch::Approx(1.5));
+
+  input.endFrame();
+  REQUIRE(input.deltaX() == Catch::Approx(0.0));
+  REQUIRE(input.deltaY() == Catch::Approx(0.0));
+  REQUIRE(input.scrollX() == Catch::Approx(0.0));
+  REQUIRE(input.scrollY() == Catch::Approx(0.0));
+  // Position persists across frames.
+  REQUIRE(input.mouseX() == Catch::Approx(110.0));
+  REQUIRE(input.mouseY() == Catch::Approx(190.0));
+}
+
+namespace {
+
+struct LuaInput {
+  lua_State *lua = nullptr;
+  InputState input;
+  double elapsed = 0.0;
+
+  LuaInput() {
+    lua = luaL_newstate();
+    luaL_openlibs(lua);
+    registerInputApi(lua, &input);
+    registerTimeApi(lua, &elapsed);
+  }
+
+  ~LuaInput() { lua_close(lua); }
+};
+
+} // namespace
+
+TEST_CASE("Lua input bindings read held state", "[Script]") {
+  LuaInput fix;
+  fix.input.onEvent(Event{events::KeyPressed{GLFW_KEY_W, 0}});
+  fix.input.onEvent(
+      Event{events::MouseButtonPressed{GLFW_MOUSE_BUTTON_LEFT, 0}});
+  fix.input.onEvent(Event{events::MouseMoved{10.0, 20.0}});
+  fix.input.onEvent(Event{events::MouseMoved{13.0, 16.0}});
+  fix.input.onEvent(Event{events::MouseScrolled{0.0, 1.0}});
+
+  REQUIRE(evalBool(fix.lua, "input.isKeyDown('W')"));
+  REQUIRE(evalBool(fix.lua, "input.isKeyDown('w')"));
+  REQUIRE_FALSE(evalBool(fix.lua, "input.isKeyDown('S')"));
+  REQUIRE(evalBool(fix.lua, "input.isKeyDown(87)")); // GLFW_KEY_W
+  REQUIRE(evalBool(fix.lua, "input.isMouseDown('left')"));
+  REQUIRE(evalBool(fix.lua, "input.isMouseDown(0)"));
+  REQUIRE_FALSE(evalBool(fix.lua, "input.isMouseDown('right')"));
+
+  Vec3 delta = evalVec3(fix.lua, "{x = input.mouseDelta().x, y = "
+                                 "input.mouseDelta().y, z = 0}");
+  REQUIRE(delta.x == Catch::Approx(3.0));
+  REQUIRE(delta.y == Catch::Approx(-4.0));
+
+  eval(fix.lua, "input.scroll()");
+  REQUIRE(tableField(fix.lua, "y") == Catch::Approx(1.0));
+  lua_settop(fix.lua, 0);
+
+  eval(fix.lua, "input.mousePos()");
+  REQUIRE(tableField(fix.lua, "x") == Catch::Approx(13.0));
+  REQUIRE(tableField(fix.lua, "y") == Catch::Approx(16.0));
+  lua_settop(fix.lua, 0);
+
+  requireErr(fix.lua, "input.isKeyDown('NoSuchKey')");
+  requireErr(fix.lua, "input.isMouseDown('sideways')");
+  requireErr(fix.lua, "input.isMouseDown(99)");
+}
+
+TEST_CASE("Lua time.now tracks elapsed time", "[Script]") {
+  LuaInput fix;
+  eval(fix.lua, "time.now()");
+  REQUIRE(lua_tonumber(fix.lua, -1) == Catch::Approx(0.0));
+  lua_settop(fix.lua, 0);
+
+  fix.elapsed = 1.5;
+  eval(fix.lua, "time.now()");
+  REQUIRE(lua_tonumber(fix.lua, -1) == Catch::Approx(1.5));
+  lua_settop(fix.lua, 0);
+}
+
+TEST_CASE("ScriptManager exposes input and time to scripts", "[Script]") {
+  Scene scene;
+  GameObject &box = scene.create("Box");
+  box.transform.position = {0.0f, 0.0f, 0.0f};
+
+  std::filesystem::path path = writeTempScript(
+      "lodge_test_input.lua",
+      "function Update(dt)\n"
+      "  if input.isKeyDown('D') then\n"
+      "    scene.translate(scene.findByName('Box'), {x = dt * 2.0, y = 0, z = "
+      "0})\n"
+      "  end\n"
+      "  local d = input.mouseDelta()\n"
+      "  scene.translate(scene.findByName('Box'), {x = d.x, y = 0, z = 0})\n"
+      "  local t = time.now()\n"
+      "  scene.setPosition(scene.findByName('Clock'), {x = t, y = 0, z = 0})\n"
+      "end\n");
+  scene.create("Clock");
+
+  ScriptManager scripts(scene);
+  scripts.loadScript(path);
+
+  // No input: only the clock moves with elapsed time.
+  scripts.onUpdate(1.0f);
+  requireVec3Near(box.transform.position, {0.0f, 0.0f, 0.0f});
+  REQUIRE(scripts.elapsed() == Catch::Approx(1.0));
+
+  // Hold D and move the mouse: box moves by key speed + delta.
+  scripts.onEvent(Event{events::KeyPressed{GLFW_KEY_D, 0}});
+  scripts.onEvent(Event{events::MouseMoved{0.0, 0.0}});
+  scripts.onEvent(Event{events::MouseMoved{5.0, 0.0}});
+  scripts.onUpdate(1.0f);
+  requireVec3Near(box.transform.position, {7.0f, 0.0f, 0.0f});
+  REQUIRE(scripts.elapsed() == Catch::Approx(2.0));
+
+  // Deltas clear each frame: without new mouse events only the key applies.
+  scripts.onUpdate(1.0f);
+  requireVec3Near(box.transform.position, {9.0f, 0.0f, 0.0f});
+
+  // Release D: box stays put, clock keeps tracking time.
+  scripts.onEvent(Event{events::KeyReleased{GLFW_KEY_D, 0}});
+  scripts.onUpdate(1.0f);
+  requireVec3Near(box.transform.position, {9.0f, 0.0f, 0.0f});
+  GameObject *clock = scene.findByName("Clock");
+  REQUIRE(clock != nullptr);
+  REQUIRE(clock->transform.position.x == Catch::Approx(4.0));
 }

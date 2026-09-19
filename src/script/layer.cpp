@@ -4,4 +4,9 @@ ScriptLayer::ScriptLayer(Scene &scene) : m_scripts(scene) {}
 
 void ScriptLayer::onAttach() { m_scripts.loadSceneScripts(); }
 
-void ScriptLayer::onUpdate(float dt) { m_scripts.updateScripts(dt); }
+void ScriptLayer::onUpdate(float dt) { m_scripts.onUpdate(dt); }
+
+bool ScriptLayer::onEvent(const Event &event) {
+  m_scripts.onEvent(event);
+  return false;
+}

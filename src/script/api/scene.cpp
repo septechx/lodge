@@ -1,4 +1,4 @@
-#include "scene_api.hpp"
+#include "scene.hpp"
 
 #include "src/scene/scene.hpp"
 

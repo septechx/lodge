@@ -1,39 +1,18 @@
 #include "manager.hpp"
 
-#include "src/script/scene_api.hpp"
+#include "src/script/api/input.hpp"
+#include "src/script/api/log.hpp"
+#include "src/script/api/scene.hpp"
+#include "src/script/api/time.hpp"
 
 #include <lua.hpp>
 #include <spdlog/spdlog.h>
 
 #include <string>
 
-static int l_logInfo(lua_State *lua) {
-  spdlog::info("{}", luaL_checkstring(lua, 1));
-  return 0;
-}
+namespace {
 
-static int l_logWarn(lua_State *lua) {
-  spdlog::warn("{}", luaL_checkstring(lua, 1));
-  return 0;
-}
-
-int l_logError(lua_State *lua) {
-  spdlog::error("{}", luaL_checkstring(lua, 1));
-  return 0;
-}
-
-static void registerLogApi(lua_State *lua) {
-  lua_newtable(lua);
-  lua_pushcfunction(lua, l_logInfo);
-  lua_setfield(lua, -2, "info");
-  lua_pushcfunction(lua, l_logWarn);
-  lua_setfield(lua, -2, "warn");
-  lua_pushcfunction(lua, l_logError);
-  lua_setfield(lua, -2, "error");
-  lua_setglobal(lua, "log");
-}
-
-static void pushSandboxEnv(lua_State *lua) {
+void pushSandboxEnv(lua_State *lua) {
   lua_newtable(lua);
   lua_newtable(lua);
   lua_pushvalue(lua, LUA_GLOBALSINDEX);
@@ -41,7 +20,7 @@ static void pushSandboxEnv(lua_State *lua) {
   lua_setmetatable(lua, -2);
 }
 
-static int refEnvField(lua_State *lua, int envRef, const char *name) {
+int refEnvField(lua_State *lua, int envRef, const char *name) {
   lua_rawgeti(lua, LUA_REGISTRYINDEX, envRef);
   lua_getfield(lua, -1, name);
   int ref = LUA_NOREF;
@@ -54,11 +33,15 @@ static int refEnvField(lua_State *lua, int envRef, const char *name) {
   return ref;
 }
 
+} // namespace
+
 ScriptManager::ScriptManager(Scene &scene) : m_scene(scene) {
   m_lua = luaL_newstate();
   luaL_openlibs(m_lua);
 
   registerSceneApi(m_lua, m_scene);
+  registerInputApi(m_lua, &m_input);
+  registerTimeApi(m_lua, &m_elapsed);
   registerLogApi(m_lua);
 }
 
@@ -152,7 +135,8 @@ void ScriptManager::loadScriptWithOwner(std::filesystem::path path,
   }
 }
 
-void ScriptManager::updateScripts(float dt) {
+void ScriptManager::onUpdate(float dt) {
+  m_elapsed += dt;
   for (Script &script : m_scripts) {
     if (script.updateRef == LUA_NOREF) {
       continue;
@@ -166,7 +150,10 @@ void ScriptManager::updateScripts(float dt) {
       throwError(script.path, script.ownerId);
     }
   }
+  m_input.endFrame();
 }
+
+void ScriptManager::onEvent(const Event &event) { m_input.onEvent(event); }
 
 void ScriptManager::throwError(const std::filesystem::path &path,
                                uint32_t ownerId) {
