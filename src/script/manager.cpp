@@ -35,12 +35,13 @@ int refEnvField(lua_State *lua, int envRef, const char *name) {
 
 } // namespace
 
-ScriptManager::ScriptManager(Scene &scene) : m_scene(scene) {
+ScriptManager::ScriptManager(Scene &scene, GLFWwindow *window)
+    : m_scene(scene), m_window(window) {
   m_lua = luaL_newstate();
   luaL_openlibs(m_lua);
 
   registerSceneApi(m_lua, m_scene);
-  registerInputApi(m_lua, &m_input);
+  registerInputApi(m_lua, &m_input, m_window);
   registerTimeApi(m_lua, &m_elapsed);
   registerLogApi(m_lua);
 }

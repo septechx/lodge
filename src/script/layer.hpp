@@ -3,9 +3,11 @@
 #include "src/core/layer.hpp"
 #include "src/script/manager.hpp"
 
+struct GLFWwindow;
+
 class ScriptLayer final : public Layer {
 public:
-  ScriptLayer(Scene &scene);
+  ScriptLayer(Scene &scene, GLFWwindow *window = nullptr);
   ~ScriptLayer() = default;
 
   void onAttach() override;

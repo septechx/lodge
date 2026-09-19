@@ -45,7 +45,8 @@ Engine::Engine(std::vector<std::string> args) {
 
   m_layers = std::make_unique<LayerStack>();
 
-  m_layers->pushLayer("scripts", std::make_unique<ScriptLayer>(*m_scene));
+  m_layers->pushLayer("scripts",
+                      std::make_unique<ScriptLayer>(*m_scene, m_window.get()));
 
   m_layers->pushLayer("control", std::make_unique<ControlLayer>(*m_window));
 

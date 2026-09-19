@@ -4,4 +4,7 @@
 
 #include <lua.hpp>
 
-void registerInputApi(lua_State *lua, const InputState *state);
+struct GLFWwindow;
+
+void registerInputApi(lua_State *lua, const InputState *state,
+                      GLFWwindow *window = nullptr);

@@ -9,6 +9,8 @@
 #include <filesystem>
 #include <vector>
 
+struct GLFWwindow;
+
 struct Script {
   std::filesystem::path path;
   int envRef = LUA_NOREF;
@@ -19,7 +21,7 @@ struct Script {
 
 class ScriptManager {
 public:
-  ScriptManager(Scene &scene);
+  ScriptManager(Scene &scene, GLFWwindow *window = nullptr);
   ~ScriptManager();
 
   ScriptManager(const ScriptManager &) = delete;
@@ -44,6 +46,7 @@ private:
   std::vector<Script> m_scripts;
   Scene &m_scene;
   InputState m_input;
+  GLFWwindow *m_window = nullptr;
   double m_elapsed = 0.0;
 
   void loadScriptWithOwner(std::filesystem::path path, uint32_t ownerId);

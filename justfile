@@ -1,5 +1,7 @@
-run *args="--debug": build
+run *args: build
   ./build/lodge {{args}}
+
+run-dev: (run "--debug")
 
 build:
   ninja -C build

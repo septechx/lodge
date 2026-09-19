@@ -1,6 +1,7 @@
 #include "layer.hpp"
 
-ScriptLayer::ScriptLayer(Scene &scene) : m_scripts(scene) {}
+ScriptLayer::ScriptLayer(Scene &scene, GLFWwindow *window)
+    : m_scripts(scene, window) {}
 
 void ScriptLayer::onAttach() { m_scripts.loadSceneScripts(); }
 
