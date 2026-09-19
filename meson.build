@@ -28,28 +28,40 @@ deps_sources = files(
   'thirdparty/tinygltf/tiny_gltf_v3.c',
 )
 
+python = find_program('python3')
+embed_script = files('tools/embed_spv.py')
+
 shaders = [
-  ['shaders/opaque.vert', 'opaque.vert.spv'],
-  ['shaders/opaque.frag', 'opaque.frag.spv'],
-  ['shaders/opaque_grab.frag', 'opaque_grab.frag.spv'],
-  ['shaders/opaque_comp.frag', 'opaque_comp.frag.spv'],
-  ['shaders/transparent.vert', 'transparent.vert.spv'],
-  ['shaders/transparent.frag', 'transparent.frag.spv'],
-  ['shaders/sky.vert', 'sky.vert.spv'],
-  ['shaders/sky.frag', 'sky.frag.spv'],
-  ['shaders/ssr.comp', 'ssr.comp.spv'],
+  ['shaders/opaque.vert', 'opaque.vert.spv', 'k_opaqueVert', 'opaque.vert.embedded.cpp'],
+  ['shaders/opaque.frag', 'opaque.frag.spv', 'k_opaqueFrag', 'opaque.frag.embedded.cpp'],
+  ['shaders/opaque_grab.frag', 'opaque_grab.frag.spv', 'k_opaqueGrabFrag', 'opaque_grab.frag.embedded.cpp'],
+  ['shaders/opaque_comp.frag', 'opaque_comp.frag.spv', 'k_opaqueCompFrag', 'opaque_comp.frag.embedded.cpp'],
+  ['shaders/transparent.vert', 'transparent.vert.spv', 'k_transparentVert', 'transparent.vert.embedded.cpp'],
+  ['shaders/transparent.frag', 'transparent.frag.spv', 'k_transparentFrag', 'transparent.frag.embedded.cpp'],
+  ['shaders/sky.vert', 'sky.vert.spv', 'k_skyVert', 'sky.vert.embedded.cpp'],
+  ['shaders/sky.frag', 'sky.frag.spv', 'k_skyFrag', 'sky.frag.embedded.cpp'],
+  ['shaders/ssr.comp', 'ssr.comp.spv', 'k_ssrComp', 'ssr.comp.embedded.cpp'],
 ]
 
-shader_deps = []
+embedded_sources = []
 foreach shader : shaders
-  shader_deps += custom_target(
+  spv = custom_target(
     'spirv_@0@'.format(shader[1]),
     input: shader[0],
     output: shader[1],
     command: ['glslc', '@INPUT@', '-o', '@OUTPUT@'],
     build_by_default: true,
   )
+  embedded_sources += custom_target(
+    'embed_@0@'.format(shader[3]),
+    input: spv,
+    output: shader[3],
+    command: [python, embed_script, '@INPUT@', '@OUTPUT@', shader[2]],
+    build_by_default: true,
+  )
 endforeach
+
+lodge_datadir = get_option('prefix') / get_option('datadir') / 'lodge'
 
 executable(
   'lodge',
@@ -92,12 +104,20 @@ executable(
   'src/script/api/time.cpp',
   'src/script/api/log.cpp',
   'src/serialize/json.cpp',
+  'src/render/pipelines/embedded_shaders.hpp',
   deps_sources,
-  sources: shader_deps,
+  sources: embedded_sources,
   dependencies: deps,
   include_directories: include,
-  cpp_args: ['-Wno-missing-field-initializers'],
-  c_args: ['-DTINYGLTF3_ENABLE_FS']
+  cpp_args: ['-Wno-missing-field-initializers', '-DLODGE_INSTALL_DATADIR="@0@"'.format(lodge_datadir)],
+  c_args: ['-DTINYGLTF3_ENABLE_FS'],
+  install: true,
+)
+
+install_subdir(
+  'example',
+  install_dir: get_option('datadir') / 'lodge',
+  strip_directory: true,
 )
 
 catch2_dep = dependency('catch2-with-main', required: false)

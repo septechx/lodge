@@ -7,12 +7,23 @@
 #include "src/scene/io.hpp"
 #include "src/scene/scene.hpp"
 #include "src/script/layer.hpp"
+#include "src/utils.hpp"
 
 #include <spdlog/spdlog.h>
 
 #include <filesystem>
 
-Engine::Engine(std::vector<std::string> args) {
+Engine::Engine(std::vector<std::string> args,
+               std::filesystem::path sceneOverride) {
+  const std::filesystem::path scenePath = resolveScenePath(sceneOverride);
+  if (scenePath.empty()) {
+    if (!sceneOverride.empty())
+      spdlog::error("scene file '{}' not found", sceneOverride.string());
+    else
+      spdlog::error("no scene file found");
+    std::exit(1);
+  }
+
   if (std::ranges::find(args, "x11") != args.end()) {
     glfwInitHint(GLFW_PLATFORM, GLFW_PLATFORM_X11);
   }
@@ -35,7 +46,11 @@ Engine::Engine(std::vector<std::string> args) {
   m_assets = std::make_unique<AssetStore>(m_renderer->getDevice());
   m_scene = std::make_unique<Scene>();
 
-  loadSceneFromFile(*m_scene, *m_assets, "scene.json");
+  spdlog::info("loading scene {}", scenePath.string());
+  if (!loadSceneFromFile(*m_scene, *m_assets, scenePath)) {
+    spdlog::error("failed to load scene {}", scenePath.string());
+    std::exit(1);
+  }
   FrameScene frame =
       gatherFrameScene(*m_scene, *m_assets, m_frameObjects, m_frameLights);
   m_renderer->initScene(*m_assets, frame);

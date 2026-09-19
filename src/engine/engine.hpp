@@ -10,6 +10,7 @@
 
 #include <GLFW/glfw3.h>
 
+#include <filesystem>
 #include <memory>
 #include <vector>
 
@@ -24,7 +25,8 @@ struct GLFWWindowDeleter {
 
 class Engine {
 public:
-  Engine(std::vector<std::string> args);
+  Engine(std::vector<std::string> args,
+         std::filesystem::path sceneOverride = {});
   ~Engine() = default;
 
   void run();

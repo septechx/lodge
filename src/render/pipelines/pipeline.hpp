@@ -2,7 +2,9 @@
 
 #include <vulkan/vulkan.h>
 
+#include <cstdint>
 #include <filesystem>
+#include <span>
 
 struct GraphicsPipeline {
   VkPipeline pipeline;
@@ -32,3 +34,10 @@ ShaderModules loadShaders(VkDevice device, const std::filesystem::path &vert,
 
 void loadShader(VkDevice device, const std::filesystem::path path,
                 VkShaderModule &module);
+
+void loadShaderFromWords(VkDevice device, std::span<const uint32_t> words,
+                         VkShaderModule &module);
+
+ShaderModules loadShadersFromWords(VkDevice device,
+                                   std::span<const uint32_t> vert,
+                                   std::span<const uint32_t> frag);

@@ -6,6 +6,9 @@
 #include <filesystem>
 #include <string>
 
+std::filesystem::path executableDir();
+std::filesystem::path resolveScenePath(const std::filesystem::path &override);
+
 #define LDG_ASSERT(cond)                                                       \
   do {                                                                         \
     if (!(cond)) {                                                             \

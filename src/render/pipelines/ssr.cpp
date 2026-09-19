@@ -1,14 +1,13 @@
 #include "ssr.hpp"
 
+#include "src/render/pipelines/embedded_shaders.hpp"
 #include "src/render/utils.hpp"
-
-#include <filesystem>
 
 ComputePipeline createSsrPipeline(VkDevice device,
                                   VkDescriptorSetLayout frameLayout,
                                   VkDescriptorSetLayout passLayout) {
   VkShaderModule comp;
-  loadShader(device, "build/ssr.comp.spv", comp);
+  loadShaderFromWords(device, LODGE_SHADER_WORDS(k_ssrComp), comp);
   VkPipelineShaderStageCreateInfo stage = {
       .sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO,
       .stage = VK_SHADER_STAGE_COMPUTE_BIT,

@@ -31,3 +31,23 @@ ShaderModules loadShaders(VkDevice device, const std::filesystem::path &vert,
   loadShader(device, frag, modules.frag);
   return modules;
 }
+
+void loadShaderFromWords(VkDevice device, std::span<const uint32_t> words,
+                         VkShaderModule &module) {
+  VkShaderModuleCreateInfo sci = {
+      .sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO,
+      .codeSize = words.size_bytes(),
+      .pCode = words.data(),
+  };
+  CHECK_VK(vkCreateShaderModule(device, &sci, nullptr, &module),
+           "create shader module");
+}
+
+ShaderModules loadShadersFromWords(VkDevice device,
+                                   std::span<const uint32_t> vert,
+                                   std::span<const uint32_t> frag) {
+  ShaderModules modules;
+  loadShaderFromWords(device, vert, modules.vert);
+  loadShaderFromWords(device, frag, modules.frag);
+  return modules;
+}

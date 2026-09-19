@@ -1,14 +1,15 @@
 #include "transparent.hpp"
 
 #include "src/render/pipelines/builder.hpp"
+#include "src/render/pipelines/embedded_shaders.hpp"
 
 GraphicsPipeline
 createTransparentPipeline(VkDevice device, VkFormat colorFormat,
                           VkFormat depthFormat,
                           std::span<const VkDescriptorSetLayout> setLayouts) {
   PipelineDesc desc{
-      .vertPath = "build/transparent.vert.spv",
-      .fragPath = "build/transparent.frag.spv",
+      .vertWords = LODGE_SHADER_WORDS(k_transparentVert),
+      .fragWords = LODGE_SHADER_WORDS(k_transparentFrag),
       .cull = Cull::Back,
       .blendEnable = true,
       .depthTest = true,

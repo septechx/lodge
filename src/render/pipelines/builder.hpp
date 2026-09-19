@@ -15,8 +15,8 @@ enum class VertexInputKind {
 };
 
 struct PipelineDesc {
-  const char *vertPath = nullptr;
-  const char *fragPath = nullptr;
+  std::span<const uint32_t> vertWords{};
+  std::span<const uint32_t> fragWords{};
   Cull cull = Cull::Back;
   bool blendEnable = false;
   bool depthTest = true;

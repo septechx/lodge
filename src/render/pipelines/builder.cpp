@@ -9,7 +9,8 @@
 GraphicsPipeline
 createGraphicsPipeline(VkDevice device, const PipelineDesc &desc,
                        std::span<const VkDescriptorSetLayout> setLayouts) {
-  ShaderModules modules = loadShaders(device, desc.vertPath, desc.fragPath);
+  ShaderModules modules =
+      loadShadersFromWords(device, desc.vertWords, desc.fragWords);
 
   VkPipelineShaderStageCreateInfo stages[2] = {
       {.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO,

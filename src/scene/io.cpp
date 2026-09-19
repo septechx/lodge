@@ -61,6 +61,23 @@ bool loadSceneFromFile(Scene &scene, AssetStore &assets,
 
   scene.deserializeWithModels(*value, handleFor);
 
+  for (GameObject &object : scene.objects()) {
+    for (ScriptRef &ref : object.scripts) {
+      std::filesystem::path refPath(ref.path);
+      if (refPath.is_absolute() || baseDir.empty())
+        continue;
+      const std::filesystem::path sceneRelative = baseDir / refPath;
+      std::error_code ec;
+      if (std::filesystem::exists(sceneRelative, ec)) {
+        ref.path = sceneRelative.lexically_normal().generic_string();
+      } else if (std::filesystem::exists(refPath, ec)) {
+        continue;
+      } else {
+        ref.path = sceneRelative.lexically_normal().generic_string();
+      }
+    }
+  }
+
   spdlog::info("loaded scene {} with {} objects", scenePath.string(),
                scene.objects().size());
   return true;

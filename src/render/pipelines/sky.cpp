@@ -1,13 +1,14 @@
 #include "sky.hpp"
 
 #include "src/render/pipelines/builder.hpp"
+#include "src/render/pipelines/embedded_shaders.hpp"
 
 GraphicsPipeline
 createSkyPipeline(VkDevice device, VkFormat colorFormat, VkFormat depthFormat,
                   std::span<const VkDescriptorSetLayout> setLayouts) {
   PipelineDesc desc{
-      .vertPath = "build/sky.vert.spv",
-      .fragPath = "build/sky.frag.spv",
+      .vertWords = LODGE_SHADER_WORDS(k_skyVert),
+      .fragWords = LODGE_SHADER_WORDS(k_skyFrag),
       .cull = Cull::None,
       .blendEnable = false,
       .depthTest = false,
@@ -25,8 +26,8 @@ createSkyGrabPipeline(VkDevice device, VkFormat colorFormat,
                       VkFormat normalFormat, VkFormat depthFormat,
                       std::span<const VkDescriptorSetLayout> setLayouts) {
   PipelineDesc desc{
-      .vertPath = "build/sky.vert.spv",
-      .fragPath = "build/sky.frag.spv",
+      .vertWords = LODGE_SHADER_WORDS(k_skyVert),
+      .fragWords = LODGE_SHADER_WORDS(k_skyFrag),
       .cull = Cull::None,
       .blendEnable = false,
       .depthTest = false,

@@ -1,14 +1,15 @@
 #include "opaque.hpp"
 
 #include "src/render/pipelines/builder.hpp"
+#include "src/render/pipelines/embedded_shaders.hpp"
 
 GraphicsPipeline
 createOpaquePipeline(VkDevice device, VkFormat colorFormat,
                      VkFormat depthFormat,
                      std::span<const VkDescriptorSetLayout> setLayouts) {
   PipelineDesc desc{
-      .vertPath = "build/opaque.vert.spv",
-      .fragPath = "build/opaque.frag.spv",
+      .vertWords = LODGE_SHADER_WORDS(k_opaqueVert),
+      .fragWords = LODGE_SHADER_WORDS(k_opaqueFrag),
       .cull = Cull::None,
       .blendEnable = false,
       .depthTest = true,
@@ -26,8 +27,8 @@ createOpaqueGrabPipeline(VkDevice device, VkFormat colorFormat,
                          VkFormat normalFormat, VkFormat depthFormat,
                          std::span<const VkDescriptorSetLayout> setLayouts) {
   PipelineDesc desc{
-      .vertPath = "build/opaque.vert.spv",
-      .fragPath = "build/opaque_grab.frag.spv",
+      .vertWords = LODGE_SHADER_WORDS(k_opaqueVert),
+      .fragWords = LODGE_SHADER_WORDS(k_opaqueGrabFrag),
       .cull = Cull::None,
       .blendEnable = false,
       .depthTest = true,
@@ -45,8 +46,8 @@ createOpaqueCompPipeline(VkDevice device, VkFormat colorFormat,
                          VkFormat depthFormat,
                          std::span<const VkDescriptorSetLayout> setLayouts) {
   PipelineDesc desc{
-      .vertPath = "build/opaque.vert.spv",
-      .fragPath = "build/opaque_comp.frag.spv",
+      .vertWords = LODGE_SHADER_WORDS(k_opaqueVert),
+      .fragWords = LODGE_SHADER_WORDS(k_opaqueCompFrag),
       .cull = Cull::None,
       .blendEnable = false,
       .depthTest = true,
